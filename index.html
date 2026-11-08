@@ -101,7 +101,7 @@ const SUPABASE_URL = "https://kacupvprosjcfsytmwxp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Z-xJzXWqdLBn5nsqNSC3vA_gok7JcEA";
 
 const sb = (SUPABASE_URL && SUPABASE_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-let USER = null, ROLE = null, RECOVERY = false, VIEW = null, cur = null, loginMode = "in", KL = "";
+let USER = null, ROLE = null, RECOVERY = false, VIEW = null, cur = null, loginMode = "in", KL = "", EDIT = false;
 const isAdmin = () => ROLE === "admin";
 
 /* ---------- Util ---------- */
@@ -178,6 +178,11 @@ async function gate(app) {
 }
 
 /* ---------- Tampilan ---------- */
+const artForm = (a, slug) => `<form id="ef" class="frm" style="margin:14px 0;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:6px"><h3 style="margin:0">${a ? "Edit " + esc(lbl(a)) : "Tambah pasal"}</h3>
+  <input type="hidden" id="e-id" value="${esc(a?.id || "")}"><input type="hidden" id="e-slug" value="${esc(slug)}"><input type="hidden" id="e-ord" value="${a?.ord ?? ""}"><input type="hidden" id="e-page" value="${a?.page ?? ""}">
+  <input id="e-pasal" placeholder="Nomor pasal" required value="${esc(a?.pasal || "")}"><input id="e-bab" placeholder="Bab (angka romawi)" value="${esc(a?.bab || "")}"><input id="e-bt" placeholder="Judul bab" value="${esc(a?.bab_title || "")}">
+  <textarea id="e-text" rows="8" required placeholder="Isi pasal (satu ayat/huruf per baris)">${esc(a?.text || "")}</textarea><textarea id="e-pj" rows="3" placeholder="Penjelasan">${esc(a?.penjelasan || "")}</textarea>
+  <div class="row" style="margin:0"><button class="p" type="submit">Simpan</button><button type="button" data-act="cancelEdit">Batal</button></div></form>`;
 const lawItem = l => `<a class="item" href="#/law/${esc(l.slug)}"><b class="serif">${esc(l.short)}</b><small>${esc(l.title)}</small><div class="meta"><span class="tag">${esc(l.subject || "")}</span>${l.year || ""}</div></a>`;
 const card = (a, l, q) => `<a class="item" href="#/a/${enc(a.id)}"><b class="serif">${esc(lbl(a))}</b><small>${esc(l ? l.short : "")}${a.bab_title ? " · " + esc(a.bab_title) : ""}</small><div>${hl(snip(a.text, q), q)}</div></a>`;
 const V = {
@@ -213,15 +218,16 @@ const V = {
     const [l, arts] = await Promise.all([lawOf(slug), API.articles(slug)]);
     if (!l) return empty("Peraturan tidak ditemukan.");
     let h = `<a class="crumb" href="#/">← Pasal</a><h1>${esc(l.short)}</h1><p class="sub">${esc(l.title)}</p><p class="pj">${esc(l.description || "")}</p>
-    <div class="row">${l.pdf_path ? `<button class="p" data-act="openpdf" data-s="${esc(slug)}">Buka PDF</button><button data-act="dlpdf" data-s="${esc(slug)}">Unduh PDF</button>` : ""}<button data-act="dltxt" data-s="${esc(slug)}">Unduh teks (.txt)</button></div>`, last = null;
-    for (const a of arts) { const key = (a.bab || "") + a.bab_title; if (key !== last) { h += `<h2 class="bab">${a.bab ? "Bab " + esc(a.bab) + " — " : ""}${esc(a.bab_title || "")}</h2>`; last = key; } h += card(a, l, ""); }
+    <div class="row">${l.pdf_path ? `<button class="p" data-act="openpdf" data-s="${esc(slug)}">Buka PDF</button><button data-act="dlpdf" data-s="${esc(slug)}">Unduh PDF</button>` : ""}<button data-act="dltxt" data-s="${esc(slug)}">Unduh teks (.txt)</button>${isAdmin() ? `<button data-act="addart" data-s="${esc(slug)}">+ Tambah pasal</button>` : ""}</div><div id="addbox"></div>`, last = null;
+    for (const a of arts) { const key = (a.bab || "") + a.bab_title; if (key !== last) { h += `<h2 class="bab">${a.bab ? "Bab " + esc(a.bab) + " — " : ""}${esc(a.bab_title || "")}</h2>`; last = key; } h += card(a, l, "") + (isAdmin() ? `<div class="row" style="margin:-4px 0 12px"><button data-act="gotoedit" data-id="${esc(a.id)}">Edit pasal</button></div>` : ""); }
     return h + (arts.length ? "" : empty("Belum ada pasal untuk peraturan ini."));
   },
   async article(id) {
     const a = await API.article(id); if (!a) return empty("Pasal tidak ditemukan.");
-    cur = a; const l = await lawOf(a.law_slug), saved = store.get().includes(a.id);
+    cur = a; const l = await lawOf(a.law_slug), saved = store.get().includes(a.id), open = EDIT && isAdmin(); EDIT = false;
     return `<a class="crumb" href="#/law/${esc(a.law_slug)}">← ${esc(l ? l.short : "Kembali")}</a><p class="meta">${a.bab ? "Bab " + esc(a.bab) + " · " : ""}${esc(a.bab_title || "")}</p><h1 class="pasal">${esc(lbl(a))}</h1><p class="sub">Sumber: ${esc(l ? l.title : "")}</p>
     <div class="row"><button class="p" data-act="copy">Salin teks</button><button data-act="cite">Salin kutipan</button><button data-act="bm">${saved ? "Hapus dari tersimpan" : "Simpan pasal"}</button>${a.page && l && l.pdf_path ? `<button data-act="pdf">Lihat halaman PDF asli (hal. ${a.page})</button>` : ""}</div>
+    ${isAdmin() ? `<div class="row"><button data-act="editart">Edit pasal</button><button data-act="delart">Hapus pasal</button></div>` : ""}<div id="edit">${open ? artForm(a, a.law_slug) : ""}</div>
     <div class="text">${fmt(a.text)}</div><h2 style="font-size:18px">Penjelasan</h2><div class="pj">${fmt(a.penjelasan || "Cukup jelas.")}</div>
     <p class="meta">Teks bersifat rujukan. Verifikasi ke sumber resmi (JDIH atau peraturan.go.id) sebelum dipakai dalam dokumen hukum.</p>`;
   },
@@ -371,11 +377,9 @@ V.admin = async function (app) {
     <input id="pf" type="file" accept="application/pdf"><button class="p" id="pr" type="button">Baca dan simpan</button>
   </div><div id="pv"></div>
   <h2 class="bab">2. Kelola peraturan dan kitab</h2>
-  <div class="row"><select id="ml" aria-label="Dokumen">${opts}</select><button id="ld" type="button">Tampilkan pasal</button><button id="ei" type="button">Edit info</button><button id="dl" type="button">Hapus dokumen</button></div>
+  <div class="row"><select id="ml" aria-label="Dokumen">${opts}</select><button id="ei" type="button">Edit info</button><button id="dl" type="button">Hapus dokumen</button></div>
   <form id="inf" class="frm" hidden><input id="i-short" placeholder="Nama singkat" required><input id="i-title" placeholder="Judul lengkap" required><select id="i-grp"><option value="peraturan">Peraturan</option><option value="kitab">Kitab</option></select><input id="i-year" type="number" placeholder="Tahun"><input id="i-subject" placeholder="Bidang"><textarea id="i-desc" rows="2" placeholder="Deskripsi"></textarea><button class="p">Simpan info</button></form>
-  <div id="mlist"></div>
-  <h3>Tambah / ubah pasal (pada dokumen terpilih)</h3>
-  <form id="af" class="frm"><input type="hidden" id="a-id"><input type="hidden" id="a-ord"><input id="a-pasal" placeholder="Nomor pasal" required><input id="a-bab" placeholder="Bab (angka romawi)"><input id="a-bt" placeholder="Judul bab"><textarea id="a-text" rows="6" placeholder="Isi pasal (satu ayat/huruf per baris)" required></textarea><textarea id="a-pj" rows="2" placeholder="Penjelasan (opsional)"></textarea><button class="p">Simpan pasal</button></form>
+  <p class="meta">Untuk mengubah, menambah, atau menghapus pasal: buka peraturannya di menu Pasal. Tombol edit hanya muncul untuk editor.</p>
   <h2 class="bab">3. Kelola kamus</h2>
   <div class="gbox" id="glist"></div>
   <form id="gf" class="frm" style="margin-top:10px"><input type="hidden" id="g-old"><input id="g-term" placeholder="Istilah" required><textarea id="g-def" rows="3" placeholder="Arti" required></textarea><button class="p">Simpan istilah</button></form>`;
@@ -410,29 +414,9 @@ V.admin = async function (app) {
     } catch (e) { say("pv", ""); fail(e); }
   };
 
-  const list = async () => {
-    const arts = await API.articles($("#ml").value);
-    $("#mlist").innerHTML = arts.length ? arts.map(a => `<div class="item"><b class="serif">${esc(lbl(a))}</b><small>${esc(a.text.slice(0, 110))}…</small><div class="row" style="margin:8px 0 0"><button data-e="${esc(a.id)}" type="button">Ubah</button><button data-d="${esc(a.id)}" type="button">Hapus</button></div></div>`).join("") : empty("Belum ada pasal.");
-    $("#mlist").onclick = async e => {
-      try {
-        if (e.target.dataset.e) { const a = arts.find(x => x.id === e.target.dataset.e); $("#a-id").value = a.id; $("#a-ord").value = a.ord; $("#a-pasal").value = a.pasal; $("#a-bab").value = a.bab || ""; $("#a-bt").value = a.bab_title || ""; $("#a-text").value = a.text; $("#a-pj").value = a.penjelasan || ""; $("#af").scrollIntoView(); }
-        if (e.target.dataset.d && confirm("Hapus pasal ini?")) { const r = await sb.from("articles").delete().eq("id", e.target.dataset.d); if (r.error) throw r.error; list(); }
-      } catch (x) { fail(x); }
-    };
-  };
-  $("#ld").onclick = () => list().catch(fail);
   $("#dl").onclick = async () => { const s = $("#ml").value; if (s && confirm("Hapus dokumen " + s + " beserta semua pasalnya?")) { const r = await sb.from("laws").delete().eq("slug", s); r.error ? fail(r.error) : location.reload(); } };
   $("#ei").onclick = async () => { const l = await API.law($("#ml").value); if (!l) return; $("#inf").hidden = false; $("#i-short").value = l.short; $("#i-title").value = l.title; $("#i-grp").value = l.grp; $("#i-year").value = l.year ?? ""; $("#i-subject").value = l.subject ?? ""; $("#i-desc").value = l.description ?? ""; };
   $("#inf").onsubmit = async e => { e.preventDefault(); const s = $("#ml").value, r = await sb.from("laws").update({ short: val("i-short"), title: val("i-title"), grp: $("#i-grp").value, type: val("i-short"), year: +val("i-year") || null, subject: val("i-subject"), description: val("i-desc") }).eq("slug", s); if (r.error) return fail(r.error); delete lawCache[s]; ok("Info tersimpan."); };
-  $("#af").onsubmit = async e => {
-    e.preventDefault();
-    try {
-      const slug = $("#ml").value, pasal = val("a-pasal");
-      const row = { id: val("a-id") || `${slug}-${pasal}`.toLowerCase().replace(/\s+/g, "-"), law_slug: slug, pasal, bab: val("a-bab") || null, bab_title: val("a-bt") || null, text: val("a-text"), penjelasan: val("a-pj") || "Cukup jelas.", ord: +val("a-ord") || parseInt(pasal) || 999 };
-      const r = await sb.from("articles").upsert(row); if (r.error) throw r.error;
-      $("#af").reset(); $("#a-id").value = ""; $("#a-ord").value = ""; ok("Pasal tersimpan."); list();
-    } catch (x) { fail(x); }
-  };
   const gl = async () => {
     const g = await API.glossary();
     $("#glist").innerHTML = g.length ? "<dl>" + g.map(x => `<dt>${esc(x.term)}</dt><dd>${esc(x.definition)}</dd><div class="row" style="margin:4px 0 0"><button data-ge="${x.id}" type="button">Ubah</button><button data-gd="${x.id}" type="button">Hapus</button></div>`).join("") + "</dl>" : empty("Belum ada istilah.");
@@ -488,6 +472,14 @@ addEventListener("hashchange", route);
 document.addEventListener("submit", async e => {
   const f = e.target.id;
   if (f === "sf") { e.preventDefault(); const v = val("q"); location.hash = v ? "#/cari/" + enc(v) : "#/"; }
+  if (f === "ef") {
+    e.preventDefault(); if (!isAdmin()) return;
+    const slug = val("e-slug"), pasal = val("e-pasal"), isNew = !val("e-id");
+    const row = { id: val("e-id") || `${slug}-${pasal}`.toLowerCase().replace(/\s+/g, "-"), law_slug: slug, pasal, bab: val("e-bab") || null, bab_title: val("e-bt") || null, text: val("e-text"), penjelasan: val("e-pj") || "Cukup jelas.", ord: +val("e-ord") || parseInt(pasal) || 999 };
+    if (+val("e-page")) row.page = +val("e-page");
+    const r = await sb.from("articles").upsert(row); if (r.error) return toast("Gagal menyimpan: " + r.error.message);
+    toast("Pasal tersimpan."); if (isNew) location.hash = "#/a/" + enc(row.id); else route();
+  }
   if (f === "lf") {
     e.preventDefault(); const email = val("em"), pw = $("#pw") ? $("#pw").value : "", btn = e.target.querySelector("button.p"), back = location.origin + location.pathname; btn.disabled = true;
     try {
@@ -511,7 +503,12 @@ document.addEventListener("click", async e => {
     if (d.act === "openpdf") location.hash = "#/kitab/" + d.s;
     if (d.act === "dlpdf") await dlPdf(d.s);
     if (d.act === "dltxt") { const l = await lawOf(d.s), arts = await API.articles(d.s), t = l.title + "\n\n" + arts.map(a => `${lbl(a)}\n${a.text}`).join("\n\n"), a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/plain" })); a.download = d.s + ".txt"; a.click(); }
-    if (!cur || !["copy", "cite", "bm", "pdf"].includes(d.act)) return;
+    if (d.act === "gotoedit") { EDIT = true; location.hash = "#/a/" + enc(d.id); return; }
+    if (d.act === "addart") { if (isAdmin()) $("#addbox").innerHTML = artForm(null, d.s); return; }
+    if (d.act === "cancelEdit") { b.closest("form").remove(); return; }
+    if (!cur || !["copy", "cite", "bm", "pdf", "editart", "delart"].includes(d.act)) return;
+    if (d.act === "editart") { if (isAdmin()) { $("#edit").innerHTML = artForm(cur, cur.law_slug); $("#edit").scrollIntoView(); } return; }
+    if (d.act === "delart") { if (isAdmin() && confirm("Hapus " + lbl(cur) + " dari dokumen ini?")) { const r = await sb.from("articles").delete().eq("id", cur.id); if (r.error) throw r.error; toast("Pasal dihapus."); location.hash = "#/law/" + cur.law_slug; } return; }
     const l = await lawOf(cur.law_slug);
     if (d.act === "copy") { await navigator.clipboard.writeText(`${lbl(cur)} ${l ? l.short : ""}\n${cur.text}`); toast("Teks disalin"); }
     if (d.act === "cite") { await navigator.clipboard.writeText(`${lbl(cur)} ${l ? l.title : ""}`); toast("Kutipan disalin"); }
