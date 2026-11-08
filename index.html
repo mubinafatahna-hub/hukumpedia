@@ -81,10 +81,10 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 <script>
 /* ====== ISI DUA NILAI INI (Supabase > Project Settings > API) ====== */
 const SUPABASE_URL = "https://kacupvprosjcfsytmwxp.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_Z-xJzXWqdLBn5nsqNSC3vA_gok7JcEA"; // kunci publishable: aman di sisi klien selama RLS aktif
+const SUPABASE_KEY = "sb_publishable_Z-xJzXWqdLBn5nsqNSC3vA_gok7JcEA"; // kunci publishable: aman di sisi klien selama RLS aktif
 /* =================================================================== */
 
-const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const sb = (SUPABASE_URL && SUPABASE_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 /* Data contoh dipakai bila Supabase belum diisi */
 const DEMO = {
@@ -150,7 +150,7 @@ const store = {
 };
 const lawCache = {};
 async function lawOf(slug) { return lawCache[slug] ||= await API.law(slug); }
-const mode = () => sb ? "" : `<p class="note">Mode contoh: Supabase belum dihubungkan, sehingga yang tampil hanya beberapa pasal contoh. Isi <b>SUPABASE_URL</b> dan <b>SUPABASE_ANON_KEY</b> di index.html.</p>`;
+const mode = () => sb ? "" : `<p class="note">Mode contoh: Supabase belum dihubungkan, sehingga yang tampil hanya beberapa pasal contoh. Isi <b>SUPABASE_URL</b> dan <b>SUPABASE_KEY</b> di index.html.</p>`;
 const empty = m => `<div class="empty">${m}</div>`;
 const artItem = async (a, q) => { const l = await lawOf(a.law_slug); return `<a class="item" href="#/a/${encodeURIComponent(a.id)}"><b class="serif">Pasal ${esc(a.pasal)} ${esc(l ? l.short : "")}</b><small>${esc(a.bab_title || "")}</small><div>${hl(a.text.length > 180 ? a.text.slice(0, 180) + "…" : a.text, q)}</div></a>`; };
 
@@ -222,7 +222,7 @@ async function route() {
     if (window.afterRoute) await window.afterRoute(p);
   } catch (e) {
     console.error(e);
-    app.innerHTML = empty("Data gagal dimuat. Periksa SUPABASE_URL, SUPABASE_ANON_KEY, dan apakah supabase-schema.sql sudah dijalankan.");
+    app.innerHTML = empty("Data gagal dimuat. Periksa SUPABASE_URL, SUPABASE_KEY, dan apakah supabase-schema.sql sudah dijalankan.");
   }
   window.scrollTo(0, 0);
 }
@@ -245,6 +245,165 @@ $("#app").addEventListener("click", async e => {
 });
 addEventListener("DOMContentLoaded", route);
 </script>
-<script src="admin.js"></script>
+<script>
+/* HukumPedia: akun, panel editor, impor PDF, unduhan member. Dimuat setelah script utama di index.html */
+let USER = null, ROLE = null;
+const isAdmin = () => ROLE === "admin";
+const val = id => $("#" + id).value.trim();
+const say = (id, m) => { const e = $("#" + id); if (e) e.innerHTML = m; };
+
+async function loadUser() {
+  if (!sb) return;
+  const { data } = await sb.auth.getSession();
+  USER = data.session?.user || null; ROLE = null;
+  if (USER) { const r = await sb.from("profiles").select("role").eq("id", USER.id).maybeSingle(); ROLE = r.data?.role || "member"; }
+  $("#auth").innerHTML = USER ? `<span>${esc(USER.email)} (${ROLE})</span><button id="out">Keluar</button>` : `<a class="btn" href="#/masuk">Masuk</a>`;
+  $("#adm").hidden = !isAdmin();
+  if ($("#out")) $("#out").onclick = () => sb.auth.signOut();
+}
+if (sb) sb.auth.onAuthStateChange(() => setTimeout(() => loadUser().then(route), 0));
+
+/* ---------- PDF -> teks -> pasal ---------- */
+let PDFLIB;
+async function pdfjs() {
+  if (PDFLIB) return PDFLIB;
+  const base = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+  await new Promise((ok, no) => { const s = document.createElement("script"); s.src = base + "pdf.min.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+  pdfjsLib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.js";
+  return PDFLIB = pdfjsLib;
+}
+async function pdfPages(file) {
+  const lib = await pdfjs(), doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise, pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const c = await (await doc.getPage(i)).getTextContent(); let y = null, line = "", out = [];
+    for (const it of c.items) { const ny = it.transform[5]; if (y !== null && Math.abs(ny - y) > 2) { out.push(line); line = ""; } line += it.str; y = ny; }
+    out.push(line);
+    pages.push(out.map(s => s.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n"));
+  }
+  return pages;
+}
+const flow = s => s.trim().replace(/\n(?!\s*(\(\d+\)|[a-z]\.|\d+\.))/g, " ");
+function parseArticles(pages, slug) {
+  const all = pages.join("\n"), hits = [...all.matchAll(/^\s*Pasal\s+(\d+[A-Za-z]?)\s*$/gim)];
+  if (!hits.length) return pages.map((t, i) => ({ id: `${slug}-hal-${i + 1}`, law_slug: slug, pasal: "Hal. " + (i + 1), bab: null, bab_title: null, text: t, penjelasan: "", ord: i + 1 })).filter(a => a.text);
+  const babRe = /^\s*BAB\s+([IVXLC]+)\s*\n\s*(.+)$/gim, pre = [...all.slice(0, hits[0].index).matchAll(babRe)].pop();
+  let bab = pre ? pre[1] : null, bt = pre ? pre[2].trim() : null; const seen = {};
+  return hits.map((h, i) => {
+    let seg = all.slice(h.index + h[0].length, i + 1 < hits.length ? hits[i + 1].index : undefined);
+    const nb = [...seg.matchAll(babRe)].pop(); if (nb) seg = seg.slice(0, nb.index);
+    let id = `${slug}-${h[1]}`.toLowerCase(); seen[id] = (seen[id] || 0) + 1; if (seen[id] > 1) id += "-" + seen[id];
+    const a = { id, law_slug: slug, pasal: h[1], bab, bab_title: bt, text: flow(seg), penjelasan: "Cukup jelas.", ord: i + 1 };
+    if (nb) { bab = nb[1]; bt = nb[2].trim(); }
+    return a;
+  }).filter(a => a.text);
+}
+
+/* ---------- Halaman ---------- */
+V.extra = {
+  async masuk(app) {
+    if (!sb) { app.innerHTML = empty("Supabase belum dihubungkan."); return; }
+    app.innerHTML = `<h1>Masuk</h1><p class="sub">Member dapat mengunduh dokumen. Editor (admin) dapat menambah dan mengubah isi.</p>
+    <form id="lf" style="display:grid;gap:10px;max-width:360px"><input id="em" type="email" placeholder="Email" required autocomplete="email"><input id="pw" type="password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6" autocomplete="current-password">
+    <div class="row"><button class="p" type="submit">Masuk</button><button type="button" id="su">Daftar sebagai member</button></div></form><p id="lm" class="meta"></p>`;
+    const cred = () => ({ email: val("em"), password: $("#pw").value });
+    $("#lf").onsubmit = async e => { e.preventDefault(); const { error } = await sb.auth.signInWithPassword(cred()); if (error) say("lm", "Gagal masuk: " + esc(error.message)); else location.hash = "#/"; };
+    $("#su").onclick = async () => { if (!$("#lf").reportValidity()) return; const { data, error } = await sb.auth.signUp(cred()); say("lm", error ? "Gagal daftar: " + esc(error.message) : data.session ? "Berhasil daftar." : "Cek email Anda untuk konfirmasi, lalu masuk."); };
+  },
+
+  async admin(app) {
+    if (!isAdmin()) { app.innerHTML = empty(`Halaman ini khusus editor (admin). <a href="#/masuk"><u>Masuk</u></a>`); return; }
+    const laws = await API.laws(), opts = laws.map(l => `<option value="${esc(l.slug)}">${esc(l.short)}</option>`).join("");
+    app.innerHTML = `<h1>Panel editor</h1>
+    <h2 class="bab">Impor dari PDF</h2>
+    <div style="display:grid;gap:8px;max-width:520px">
+      <select id="tl"><option value="">+ Peraturan baru</option>${opts}</select>
+      <div id="nl" style="display:grid;gap:8px"><input id="n-slug" placeholder="slug, mis. uu-11-2008"><input id="n-short" placeholder="Nama singkat, mis. UU ITE"><input id="n-title" placeholder="Judul lengkap">
+        <select id="n-grp"><option value="peraturan">Peraturan</option><option value="kitab">Kitab hukum</option></select><input id="n-year" type="number" placeholder="Tahun"><input id="n-subject" placeholder="Bidang, mis. Pidana"></div>
+      <input id="pf" type="file" accept="application/pdf">
+      <label><input id="up" type="checkbox" checked> Simpan juga PDF asli (untuk diunduh member)</label>
+      <button class="p" id="pr">Baca PDF</button></div>
+    <div id="pv"></div>
+    <h2 class="bab">Kelola pasal</h2>
+    <div class="row"><select id="ml">${opts}</select><button id="ld">Tampilkan pasal</button><button id="dl">Hapus peraturan ini</button></div>
+    <div id="mlist"></div>
+    <form id="af" style="display:grid;gap:8px;max-width:620px;margin-top:14px"><input type="hidden" id="a-id"><input type="hidden" id="a-ord">
+      <input id="a-pasal" placeholder="Nomor pasal" required><input id="a-bab" placeholder="Bab (angka romawi)"><input id="a-bt" placeholder="Judul bab">
+      <textarea id="a-text" rows="6" placeholder="Isi pasal" required></textarea><textarea id="a-pj" rows="2" placeholder="Penjelasan (opsional)"></textarea>
+      <button class="p">Simpan pasal ke peraturan terpilih</button></form>
+    <h2 class="bab">Kamus</h2>
+    <form id="gf" style="display:grid;gap:8px;max-width:620px"><input id="g-term" placeholder="Istilah" required><textarea id="g-def" rows="3" placeholder="Arti" required></textarea><button class="p">Simpan istilah</button></form><p id="msg" class="meta"></p>`;
+    const fail = e => say("msg", "Gagal: " + esc(e.message || e));
+    $("#tl").onchange = () => $("#nl").hidden = !!$("#tl").value;
+
+    let draft = null;
+    $("#pr").onclick = async () => {
+      try {
+        const file = $("#pf").files[0]; if (!file) return say("pv", `<p class="note">Pilih file PDF dulu.</p>`);
+        const slug = $("#tl").value || val("n-slug");
+        if (!/^[a-z0-9-]+$/.test(slug)) return say("pv", `<p class="note">Slug wajib diisi: huruf kecil, angka, dan tanda hubung.</p>`);
+        if (!$("#tl").value && (!val("n-short") || !val("n-title"))) return say("pv", `<p class="note">Nama singkat dan judul wajib diisi.</p>`);
+        say("pv", `<p class="sub">Membaca PDF…</p>`);
+        const pages = await pdfPages(file);
+        if (pages.join("").length < 100) return say("pv", `<p class="note">PDF ini tampaknya hasil scan (tanpa lapisan teks), jadi belum bisa dibaca. Perlu OCR atau PDF versi teks.</p>`);
+        draft = { slug, file, rows: parseArticles(pages, slug) };
+        say("pv", `<p class="note">Ditemukan <b>${draft.rows.length}</b> ${draft.rows[0]?.pasal.startsWith("Hal.") ? "halaman (pola “Pasal N” tidak terdeteksi)" : "pasal"}. Contoh: ${draft.rows.slice(0, 3).map(r => "Pasal " + esc(r.pasal) + ": " + esc(r.text.slice(0, 70)) + "…").join(" | ")}</p><button class="p" id="sv">Simpan semua ke database</button>`);
+        $("#sv").onclick = save;
+      } catch (e) { fail(e); }
+    };
+    async function save() {
+      try {
+        say("pv", `<p class="sub">Menyimpan…</p>`);
+        if (!$("#tl").value) must(await sb.from("laws").upsert({ slug: draft.slug, short: val("n-short"), title: val("n-title"), grp: $("#n-grp").value, type: val("n-short"), year: +val("n-year") || null, subject: val("n-subject"), description: "" }));
+        for (let i = 0; i < draft.rows.length; i += 100) { const r = await sb.from("articles").upsert(draft.rows.slice(i, i + 100)); if (r.error) throw r.error; }
+        if ($("#up").checked) {
+          const u = await sb.storage.from("documents").upload(draft.slug + ".pdf", draft.file, { upsert: true, contentType: "application/pdf" }); if (u.error) throw u.error;
+          const r = await sb.from("laws").update({ pdf_path: draft.slug + ".pdf" }).eq("slug", draft.slug); if (r.error) throw r.error;
+        }
+        delete lawCache[draft.slug];
+        say("pv", `<p class="note">Tersimpan: ${draft.rows.length} entri. Sudah bisa dicari. <a href="#/law/${draft.slug}"><u>Lihat</u></a></p>`);
+      } catch (e) { say("pv", ""); fail(e); }
+    }
+
+    const list = async () => {
+      const arts = await API.articles($("#ml").value);
+      $("#mlist").innerHTML = arts.length ? arts.map(a => `<div class="item"><b class="serif">Pasal ${esc(a.pasal)}</b><small>${esc(a.text.slice(0, 110))}…</small><div class="row" style="margin:8px 0 0"><button data-e="${esc(a.id)}">Ubah</button><button data-d="${esc(a.id)}">Hapus</button></div></div>`).join("") : empty("Belum ada pasal.");
+      $("#mlist").onclick = async e => {
+        try {
+          if (e.target.dataset.e) { const a = arts.find(x => x.id === e.target.dataset.e); $("#a-id").value = a.id; $("#a-ord").value = a.ord; $("#a-pasal").value = a.pasal; $("#a-bab").value = a.bab || ""; $("#a-bt").value = a.bab_title || ""; $("#a-text").value = a.text; $("#a-pj").value = a.penjelasan || ""; $("#af").scrollIntoView(); }
+          if (e.target.dataset.d && confirm("Hapus pasal ini?")) { const r = await sb.from("articles").delete().eq("id", e.target.dataset.d); if (r.error) throw r.error; list(); }
+        } catch (x) { fail(x); }
+      };
+    };
+    $("#ld").onclick = () => list().catch(fail);
+    $("#dl").onclick = async () => { const s = $("#ml").value; if (s && confirm("Hapus peraturan " + s + " beserta semua pasalnya?")) { const r = await sb.from("laws").delete().eq("slug", s); r.error ? fail(r.error) : location.reload(); } };
+    $("#af").onsubmit = async e => {
+      e.preventDefault();
+      try {
+        const slug = $("#ml").value, pasal = val("a-pasal");
+        const row = { id: val("a-id") || `${slug}-${pasal}`.toLowerCase().replace(/\s+/g, "-"), law_slug: slug, pasal, bab: val("a-bab") || null, bab_title: val("a-bt") || null, text: val("a-text"), penjelasan: val("a-pj") || "Cukup jelas.", ord: +val("a-ord") || parseInt(pasal) || 999 };
+        const r = await sb.from("articles").upsert(row); if (r.error) throw r.error;
+        $("#af").reset(); $("#a-id").value = ""; $("#a-ord").value = ""; say("msg", "Pasal tersimpan."); list();
+      } catch (x) { fail(x); }
+    };
+    $("#gf").onsubmit = async e => { e.preventDefault(); const r = await sb.from("glossary").upsert({ term: val("g-term"), definition: val("g-def") }, { onConflict: "term" }); if (r.error) return fail(r.error); $("#gf").reset(); say("msg", "Istilah tersimpan."); };
+  }
+};
+
+/* ---------- Unduhan untuk member ---------- */
+window.afterRoute = async p => {
+  try {
+    if (p[0] !== "law" || !sb) return;
+    const l = await lawOf(p[1]), host = $("#app .sub"); if (!l || !host) return;
+    const bar = document.createElement("div"); bar.className = "row";
+    bar.innerHTML = USER ? `<button id="dt">Unduh teks (.txt)</button>${l.pdf_path ? `<button class="p" id="dp">Unduh PDF asli</button>` : ""}` : `<a class="btn" href="#/masuk">Masuk untuk mengunduh</a>`;
+    host.after(bar);
+    if ($("#dt")) $("#dt").onclick = async () => {
+      const arts = await API.articles(l.slug), t = l.title + "\n\n" + arts.map(a => `Pasal ${a.pasal}\n${a.text}`).join("\n\n");
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/plain" })); a.download = l.slug + ".txt"; a.click();
+    };
+    if ($("#dp")) $("#dp").onclick = async () => { const r = await sb.storage.from("documents").createSignedUrl(l.pdf_path, 60); r.error ? toast("Gagal mengunduh") : window.open(r.data.signedUrl, "_blank"); };
+  } catch (e) { console.error(e); }
+};
+</script>
 </body>
 </html>
