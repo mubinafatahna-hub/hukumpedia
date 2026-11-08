@@ -54,6 +54,7 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 body.guest form.s,body.guest nav,body.guest #theme,body.guest #auth{display:none}
+.text p,.pj p{margin:.45em 0}.text .ay{padding-left:2.4em;text-indent:-2.4em}.text .hu{padding-left:3.8em;text-indent:-1.4em}.text .an{padding-left:5.2em;text-indent:-1.4em}
 #auth{display:flex;gap:8px;align-items:center;font-size:13px}
 </style>
 </head>
@@ -149,6 +150,14 @@ const store = {
   get() { try { return JSON.parse(localStorage.getItem("hp_bm") || "[]"); } catch { return []; } },
   set(v) { try { localStorage.setItem("hp_bm", JSON.stringify(v)); } catch {} }
 };
+const MK = line => {
+  let m = line.match(/^[(\[]\s*([0-9lIO]{1,2}[a-z]?)\s*[)\]l]\s*(.*)$/) || line.match(/^[lI]([0-9]{1,2})[lI]\s+(.*)$/);
+  if (m) return { t: "ay", k: "(" + m[1].replace(/[lI]/g, "1").replace(/O/g, "0") + ")", rest: m[2] };
+  if ((m = line.match(/^([a-z])[.)]\s+(.*)$/))) return { t: "hu", k: m[1] + ".", rest: m[2] };
+  if ((m = line.match(/^(\d{1,2})\.\s+(.*)$/))) return { t: "an", k: m[1] + ".", rest: m[2] };
+  return null;
+};
+const fmt = t => String(t ?? "").split("\n").map(l => { const m = MK(l.trim()); return m ? `<p class="${m.t}">${esc(m.k)} ${esc(m.rest)}</p>` : `<p>${esc(l)}</p>`; }).join("");
 const lawCache = {};
 async function lawOf(slug) { return lawCache[slug] ||= await API.law(slug); }
 const mode = () => sb ? "" : `<p class="note">Mode contoh: Supabase belum dihubungkan, sehingga yang tampil hanya beberapa pasal contoh. Isi <b>SUPABASE_URL</b> dan <b>SUPABASE_KEY</b> di index.html.</p>`;
@@ -178,8 +187,8 @@ const V = {
     if (!a) return empty("Pasal tidak ditemukan.");
     const l = await lawOf(a.law_slug), saved = store.get().includes(a.id);
     return `<a class="crumb" href="#/law/${a.law_slug}">← ${esc(l ? l.short : "Kembali")}</a><p class="meta">${a.bab ? "Bab " + esc(a.bab) + " · " : ""}${esc(a.bab_title || "")}</p><h1 class="pasal">Pasal ${esc(a.pasal)}</h1><p class="sub">${esc(l ? l.title : "")}</p>
-    <div class="row"><button class="p" data-act="copy">Salin teks</button><button data-act="cite">Salin kutipan</button><button data-act="bm">${saved ? "Hapus dari tersimpan" : "Simpan pasal"}</button></div>
-    <div class="text" id="pt">${esc(a.text)}</div><h2 style="font-size:18px">Penjelasan</h2><p class="pj">${esc(a.penjelasan || "Cukup jelas.")}</p>
+    <div class="row"><button class="p" data-act="copy">Salin teks</button><button data-act="cite">Salin kutipan</button><button data-act="bm">${saved ? "Hapus dari tersimpan" : "Simpan pasal"}</button>${a.page && l && l.pdf_path && typeof USER !== "undefined" && USER ? `<button data-act="pdf">Lihat halaman PDF asli (hal. ${a.page})</button>` : ""}</div>
+    <div class="text" id="pt">${fmt(a.text)}</div><h2 style="font-size:18px">Penjelasan</h2><div class="pj">${fmt(a.penjelasan || "Cukup jelas.")}</div>
     <p class="meta">Teks di aplikasi ini bersifat rujukan. Verifikasi ke sumber resmi (JDIH atau peraturan.go.id) sebelum dipakai dalam dokumen hukum.</p>`;
   },
   async search(term) {
@@ -243,6 +252,7 @@ $("#app").addEventListener("click", async e => {
   const l = await lawOf(cur.law_slug), cite = `Pasal ${cur.pasal} ${l ? l.title : ""}`;
   if (act === "copy") { await navigator.clipboard.writeText(`Pasal ${cur.pasal} ${l ? l.short : ""}\n${cur.text}`); toast("Teks disalin"); }
   if (act === "cite") { await navigator.clipboard.writeText(cite); toast("Kutipan disalin"); }
+  if (act === "pdf") { const r = await sb.storage.from("documents").createSignedUrl(l.pdf_path, 120); r.error ? toast("Gagal membuka PDF") : window.open(r.data.signedUrl + "#page=" + cur.page, "_blank"); }
   if (act === "bm") { const s = store.get(), i = s.indexOf(cur.id); i < 0 ? s.push(cur.id) : s.splice(i, 1); store.set(s); e.target.textContent = i < 0 ? "Hapus dari tersimpan" : "Simpan pasal"; toast(i < 0 ? "Pasal disimpan" : "Pasal dihapus"); }
 });
 addEventListener("DOMContentLoaded", route);
@@ -284,24 +294,51 @@ async function pdfPages(file) {
     const c = await (await doc.getPage(i)).getTextContent(); let y = null, line = "", out = [];
     for (const it of c.items) { const ny = it.transform[5]; if (y !== null && Math.abs(ny - y) > 2) { out.push(line); line = ""; } line += it.str; y = ny; }
     out.push(line);
-    pages.push(out.map(s => s.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n"));
+    pages.push(out.map(s => s.replace(/\s+/g, " ").trim()).filter(Boolean));
   }
-  return pages;
+  // buang kepala/kaki halaman (nomor halaman, "PRESIDEN REPUBLIK INDONESIA", nomor SK) yang berulang
+  const key = s => s.toLowerCase().replace(/[^a-z]/g, ""), cnt = {};
+  pages.forEach(p => new Set([...p.slice(0, 3), ...p.slice(-3)].map(key)).forEach(k => cnt[k] = (cnt[k] || 0) + 1));
+  const junk = l => /^[-–—\s]*[0-9lIO]{1,3}[-–—\s]*$/.test(l) || /^SK\s*N[o0]/i.test(l) || (l.length < 45 && !/[a-z]/.test(l) && /RESIDEN|EFUBUK|INDONESIA|INOONESIA/.test(l));
+  return pages.map(p => p.filter((l, i) => { const edge = i < 3 || i >= p.length - 3; return !(edge && (junk(l) || (key(l).length > 2 && cnt[key(l)] >= Math.max(3, pages.length * 0.25)))); }).join("\n"));
 }
-const flow = s => s.trim().replace(/\n(?!\s*(\(\d+\)|[a-z]\.|\d+\.))/g, " ");
+const num = s => s.replace(/[lI]/g, "1").replace(/O/g, "0");
+function paras(txt) {   // satu ayat/huruf/angka = satu baris; baris lanjutan digabung
+  const out = [];
+  for (const raw of txt.split("\n")) {
+    const l = raw.trim(); if (!l) continue; const m = MK(l);
+    if (m) out.push(m.k + " " + m.rest); else if (out.length) out[out.length - 1] += " " + l; else out.push(l);
+  }
+  return out.join("\n");
+}
 function parseArticles(pages, slug) {
-  const all = pages.join("\n"), hits = [...all.matchAll(/^\s*Pasal\s+(\d+[A-Za-z]?)\s*$/gim)];
-  if (!hits.length) return pages.map((t, i) => ({ id: `${slug}-hal-${i + 1}`, law_slug: slug, pasal: "Hal. " + (i + 1), bab: null, bab_title: null, text: t, penjelasan: "", ord: i + 1 })).filter(a => a.text);
-  const babRe = /^\s*BAB\s+([IVXLC]+)\s*\n\s*(.+)$/gim, pre = [...all.slice(0, hits[0].index).matchAll(babRe)].pop();
-  let bab = pre ? pre[1] : null, bt = pre ? pre[2].trim() : null; const seen = {};
-  return hits.map((h, i) => {
-    let seg = all.slice(h.index + h[0].length, i + 1 < hits.length ? hits[i + 1].index : undefined);
-    const nb = [...seg.matchAll(babRe)].pop(); if (nb) seg = seg.slice(0, nb.index);
-    let id = `${slug}-${h[1]}`.toLowerCase(); seen[id] = (seen[id] || 0) + 1; if (seen[id] > 1) id += "-" + seen[id];
-    const a = { id, law_slug: slug, pasal: h[1], bab, bab_title: bt, text: flow(seg), penjelasan: "Cukup jelas.", ord: i + 1 };
+  const starts = []; let all = "";
+  pages.forEach(p => { starts.push(all.length); all += p + "\n"; });
+  const pageOf = i => { let n = 0; while (n + 1 < starts.length && starts[n + 1] <= i) n++; return n + 1; };
+  const pjm = [...all.matchAll(/^\s*PENJELASAN\s*$/gim)].filter(m => m.index > all.length * 0.3).pop();
+  const main = pjm ? all.slice(0, pjm.index) : all;
+  const re = /^\s*Pasal\s+([0-9lIO]{1,4}[A-Za-z]?)\s*$/gim, babRe = /^\s*BAB\s+([IVXLC]+)\s*\n\s*(.+)$/gim, hits = [...main.matchAll(re)];
+  if (!hits.length) return pages.map((t, i) => ({ id: `${slug}-hal-${i + 1}`, law_slug: slug, pasal: "Hal. " + (i + 1), bab: null, bab_title: null, text: paras(t), penjelasan: "", ord: i + 1, page: i + 1 })).filter(a => a.text);
+  const pre = [...main.slice(0, hits[0].index).matchAll(babRe)].pop();
+  let bab = pre ? pre[1] : null, bt = pre ? pre[2].trim() : null; const seen = {}, byNo = {};
+  const cut = seg => { const nb = [...seg.matchAll(babRe)].pop(); return nb ? [seg.slice(0, nb.index), nb] : [seg, null]; };
+  const arts = hits.map((h, i) => {
+    const [seg, nb] = cut(main.slice(h.index + h[0].length, i + 1 < hits.length ? hits[i + 1].index : undefined));
+    const no = num(h[1]); let id = `${slug}-${no}`.toLowerCase(); seen[id] = (seen[id] || 0) + 1; if (seen[id] > 1) id += "-" + seen[id];
+    const a = { id, law_slug: slug, pasal: no, bab, bab_title: bt, text: paras(seg), penjelasan: "Cukup jelas.", ord: i + 1, page: pageOf(h.index) };
     if (nb) { bab = nb[1]; bt = nb[2].trim(); }
-    return a;
+    (byNo[no] ||= []).push(a); return a;
   }).filter(a => a.text);
+  if (pjm) {   // bagian PENJELASAN: tempelkan ke pasal yang sama, bukan jadi pasal baru
+    const pj = all.slice(pjm.index), ph = [...pj.matchAll(re)], used = new Set();
+    ph.forEach((h, i) => {
+      const txt = paras(cut(pj.slice(h.index + h[0].length, i + 1 < ph.length ? ph[i + 1].index : undefined))[0]), t = (byNo[num(h[1])] || []).find(a => !used.has(a));
+      if (t && txt) { t.penjelasan = txt; used.add(t); }
+    });
+    const um = ph.length ? paras(pj.slice(0, ph[0].index)) : "";
+    if (um.length > 50) arts.unshift({ id: `${slug}-penjelasan-umum`, law_slug: slug, pasal: "Penjelasan Umum", bab: null, bab_title: null, text: um, penjelasan: "", ord: 0, page: pageOf(pjm.index) });
+  }
+  return arts;
 }
 
 /* ---------- Halaman ---------- */
