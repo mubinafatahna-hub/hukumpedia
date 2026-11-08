@@ -53,6 +53,7 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--onnavy);padding:9px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#auth{display:flex;gap:8px;align-items:center;font-size:13px}
 </style>
 </head>
 <body>
@@ -63,12 +64,14 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
       <input id="q" type="search" placeholder="Cari pasal, kata kunci, atau “pasal 338”" aria-label="Cari">
       <button class="p" type="submit">Cari</button>
     </form>
+    <span id="auth"></span>
     <button id="theme" type="button" aria-label="Ganti tema">Tema</button>
   </div>
   <nav id="nav">
     <a href="#/" data-k="home">Peraturan</a>
     <a href="#/kamus" data-k="kamus">Kamus</a>
     <a href="#/simpan" data-k="simpan">Tersimpan</a>
+    <a href="#/admin" data-k="admin" id="adm" hidden>Editor</a>
   </nav>
 </header>
 <main id="app"></main>
@@ -77,8 +80,8 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 /* ====== ISI DUA NILAI INI (Supabase > Project Settings > API) ====== */
-const SUPABASE_URL = "";       // contoh: https://abcdxyz.supabase.co
-const SUPABASE_ANON_KEY = "";  // kunci "anon public" (aman untuk publik karena RLS hanya baca)
+const SUPABASE_URL = "https://kacupvprosjcfsytmwxp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Z-xJzXWqdLBn5nsqNSC3vA_gok7JcEA"; // kunci publishable: aman di sisi klien selama RLS aktif
 /* =================================================================== */
 
 const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
@@ -204,7 +207,7 @@ const V = {
 let cur = null;
 async function route() {
   const h = decodeURIComponent(location.hash.slice(1) || "/"), p = h.split("/").filter(Boolean), app = $("#app");
-  const k = !p.length ? "home" : p[0] === "kamus" ? "kamus" : p[0] === "simpan" ? "simpan" : "";
+  const k = !p.length ? "home" : p[0] === "kamus" ? "kamus" : p[0] === "simpan" ? "simpan" : p[0] === "admin" ? "admin" : "";
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.k === k));
   app.innerHTML = `<p class="sub">Memuat…</p>`;
   try {
@@ -214,7 +217,9 @@ async function route() {
     else if (p[0] === "cari") { $("#q").value = p.slice(1).join("/"); app.innerHTML = await V.search(p.slice(1).join("/")); }
     else if (p[0] === "kamus") { app.innerHTML = await V.kamus(); const L = () => $("#kl").innerHTML = V.kamusList($("#kf").value); $("#kf").oninput = L; L(); }
     else if (p[0] === "simpan") app.innerHTML = await V.simpan();
+    else if (V.extra && V.extra[p[0]]) await V.extra[p[0]](app, p);
     else app.innerHTML = empty("Halaman tidak ditemukan.");
+    if (window.afterRoute) await window.afterRoute(p);
   } catch (e) {
     console.error(e);
     app.innerHTML = empty("Data gagal dimuat. Periksa SUPABASE_URL, SUPABASE_ANON_KEY, dan apakah supabase-schema.sql sudah dijalankan.");
@@ -238,7 +243,8 @@ $("#app").addEventListener("click", async e => {
   if (act === "cite") { await navigator.clipboard.writeText(cite); toast("Kutipan disalin"); }
   if (act === "bm") { const s = store.get(), i = s.indexOf(cur.id); i < 0 ? s.push(cur.id) : s.splice(i, 1); store.set(s); e.target.textContent = i < 0 ? "Hapus dari tersimpan" : "Simpan pasal"; toast(i < 0 ? "Pasal disimpan" : "Pasal dihapus"); }
 });
-route();
+addEventListener("DOMContentLoaded", route);
 </script>
+<script src="admin.js"></script>
 </body>
 </html>
