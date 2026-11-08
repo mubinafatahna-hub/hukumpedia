@@ -53,6 +53,7 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--onnavy);padding:9px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+body.guest form.s,body.guest nav,body.guest #theme,body.guest #auth{display:none}
 #auth{display:flex;gap:8px;align-items:center;font-size:13px}
 </style>
 </head>
@@ -210,6 +211,7 @@ async function route() {
   const k = !p.length ? "home" : p[0] === "kamus" ? "kamus" : p[0] === "simpan" ? "simpan" : p[0] === "admin" ? "admin" : "";
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.k === k));
   app.innerHTML = `<p class="sub">Memuat…</p>`;
+  if (window.gate && await window.gate(app)) return;
   try {
     if (!p.length) app.innerHTML = await V.home();
     else if (p[0] === "law") app.innerHTML = await V.law(p[1]);
@@ -259,8 +261,12 @@ async function loadUser() {
   if (USER) { const r = await sb.from("profiles").select("role").eq("id", USER.id).maybeSingle(); ROLE = r.data?.role || "member"; }
   $("#auth").innerHTML = USER ? `<span>${esc(USER.email)} (${ROLE})</span><button id="out">Keluar</button>` : `<a class="btn" href="#/masuk">Masuk</a>`;
   $("#adm").hidden = !isAdmin();
+  document.body.classList.toggle("guest", !!sb && !USER);
   if ($("#out")) $("#out").onclick = () => sb.auth.signOut();
 }
+if (sb) document.body.classList.add("guest");
+const authReady = loadUser();
+window.gate = async app => { await authReady; if (!sb || USER) return false; await V.extra.masuk(app); return true; };
 if (sb) sb.auth.onAuthStateChange(() => setTimeout(() => loadUser().then(route), 0));
 
 /* ---------- PDF -> teks -> pasal ---------- */
@@ -302,11 +308,12 @@ function parseArticles(pages, slug) {
 V.extra = {
   async masuk(app) {
     if (!sb) { app.innerHTML = empty("Supabase belum dihubungkan."); return; }
-    app.innerHTML = `<h1>Masuk</h1><p class="sub">Member dapat mengunduh dokumen. Editor (admin) dapat menambah dan mengubah isi.</p>
-    <form id="lf" style="display:grid;gap:10px;max-width:360px"><input id="em" type="email" placeholder="Email" required autocomplete="email"><input id="pw" type="password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6" autocomplete="current-password">
-    <div class="row"><button class="p" type="submit">Masuk</button><button type="button" id="su">Daftar sebagai member</button></div></form><p id="lm" class="meta"></p>`;
+    app.innerHTML = `<div style="max-width:400px;margin:24px auto"><h1>Masuk ke HukumPedia</h1><p class="sub">Kitab hukum dan peraturan untuk advokat dan mahasiswa hukum.</p>
+    <form id="lf" style="display:grid;gap:10px"><input id="em" type="email" placeholder="Email" required autocomplete="email"><input id="pw" type="password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6" autocomplete="current-password">
+    <button class="p" type="submit">Masuk</button><button type="button" id="su">Belum punya akun? Daftar sebagai member</button></form><p id="lm" class="meta"></p>
+    <p class="meta">Akun baru otomatis menjadi member (membaca dan mengunduh). Peran editor (admin) diberikan oleh pengelola lewat database.</p></div>`;
     const cred = () => ({ email: val("em"), password: $("#pw").value });
-    $("#lf").onsubmit = async e => { e.preventDefault(); const { error } = await sb.auth.signInWithPassword(cred()); if (error) say("lm", "Gagal masuk: " + esc(error.message)); else location.hash = "#/"; };
+    $("#lf").onsubmit = async e => { e.preventDefault(); const { error } = await sb.auth.signInWithPassword(cred()); if (error) say("lm", "Gagal masuk: " + esc(error.message)); };
     $("#su").onclick = async () => { if (!$("#lf").reportValidity()) return; const { data, error } = await sb.auth.signUp(cred()); say("lm", error ? "Gagal daftar: " + esc(error.message) : data.session ? "Berhasil daftar." : "Cek email Anda untuk konfirmasi, lalu masuk."); };
   },
 
@@ -392,6 +399,7 @@ V.extra = {
 /* ---------- Unduhan untuk member ---------- */
 window.afterRoute = async p => {
   try {
+    if (!p.length && isAdmin()) { const h = $("#app .sub"); if (h) { const b = document.createElement("div"); b.className = "row"; b.innerHTML = `<button class="p" onclick="location.hash='#/admin'">Tambah dokumen PDF / kelola isi</button>`; h.after(b); } }
     if (p[0] !== "law" || !sb) return;
     const l = await lawOf(p[1]), host = $("#app .sub"); if (!l || !host) return;
     const bar = document.createElement("div"); bar.className = "row";
