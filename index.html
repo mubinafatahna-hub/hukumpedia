@@ -11,10 +11,16 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="HukumPedia">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="hukumpedia-heksagon-gelap-1024.png">
+<link rel="apple-touch-icon" href="hukumpedia-heksagon-gelap-1024.png">
+<script>
+/* Manifest PWA dibuat langsung dari sini, jadi tidak perlu berkas terpisah. Logo = berkas PNG di repo GitHub. */
+(function () {
+  var logo = new URL("hukumpedia-heksagon-gelap-1024.png", location.href).href, root = new URL("./", location.href).href;
+  var m = { name: "HukumPedia", short_name: "HukumPedia", description: "Kamus hukum Indonesia: pasal, kitab, dan istilah hukum untuk advokat dan mahasiswa hukum.", lang: "id", start_url: root, scope: root, display: "standalone", background_color: "#14213D", theme_color: "#14213D", icons: [{ src: logo, sizes: "192x192 512x512 1024x1024", type: "image/png", purpose: "any" }] };
+  var l = document.createElement("link"); l.rel = "manifest"; l.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: "application/manifest+json" })); document.head.appendChild(l);
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
@@ -90,7 +96,7 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 <body>
 <header>
   <div class="bar">
-    <a class="brand" href="#/"><img src="logo.svg" alt="" width="30" height="30">Hukum<span>Pedia</span></a>
+    <a class="brand" href="#/"><img src="hukumpedia-heksagon-gelap-1024.png" alt="" width="30" height="30">Hukum<span>Pedia</span></a>
     <span id="auth"></span>
     <button id="theme" type="button" aria-label="Ganti tema">Tema</button>
   </div>
@@ -208,14 +214,14 @@ const V = {
     const pw = mode !== "reset" ? `<input id="pw" type="password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6" autocomplete="${mode === "in" ? "current-password" : "new-password"}">` : "";
     const pw2 = mode === "up" ? `<input id="pw2" type="password" placeholder="Ulangi kata sandi" required minlength="6" autocomplete="new-password">` : "";
     const links = { in: `<button class="lnk" type="button" data-m="reset">Lupa kata sandi?</button> · <button class="lnk" type="button" data-m="up">Daftar akun baru</button>`, up: `Sudah punya akun? <button class="lnk" type="button" data-m="in">Masuk</button>`, reset: `<button class="lnk" type="button" data-m="in">Kembali ke halaman masuk</button>` }[mode];
-    app.innerHTML = `<div class="auth"><img src="logo.svg" alt="HukumPedia" width="64" height="64" style="display:block;margin-bottom:12px"><h1>${{ in: "Masuk", up: "Daftar akun", reset: "Lupa kata sandi" }[mode]}</h1>
+    app.innerHTML = `<div class="auth"><img src="hukumpedia-heksagon-gelap-1024.png" alt="HukumPedia" width="64" height="64" style="display:block;margin-bottom:12px"><h1>${{ in: "Masuk", up: "Daftar akun", reset: "Lupa kata sandi" }[mode]}</h1>
     <p class="sub">${mode === "reset" ? "Masukkan email Anda. Kami kirim tautan untuk membuat kata sandi baru." : "HukumPedia: kitab, pasal, dan istilah hukum untuk advokat dan mahasiswa hukum."}</p>
     <form id="lf" class="frm"><input id="em" type="email" placeholder="Email" required autocomplete="email">${pw}${pw2}<button class="p" type="submit">${{ in: "Masuk", up: "Daftar", reset: "Kirim tautan reset" }[mode]}</button></form>
     <p id="lm" class="meta" role="status"></p><p class="meta">${links}</p>
     ${mode === "up" ? `<p class="meta">Akun baru otomatis berperan member (membaca, mencari, mengunduh). Peran editor diberikan oleh pengelola.</p>` : ""}</div>`;
   },
   recovery(app) {
-    app.innerHTML = `<div class="auth"><img src="logo.svg" alt="HukumPedia" width="64" height="64" style="display:block;margin-bottom:12px"><h1>Kata sandi baru</h1><p class="sub">Buat kata sandi baru untuk akun Anda.</p>
+    app.innerHTML = `<div class="auth"><img src="hukumpedia-heksagon-gelap-1024.png" alt="HukumPedia" width="64" height="64" style="display:block;margin-bottom:12px"><h1>Kata sandi baru</h1><p class="sub">Buat kata sandi baru untuk akun Anda.</p>
     <form id="rf" class="frm"><input id="np" type="password" placeholder="Kata sandi baru (min. 6 karakter)" required minlength="6" autocomplete="new-password"><input id="np2" type="password" placeholder="Ulangi kata sandi baru" required minlength="6" autocomplete="new-password"><button class="p" type="submit">Simpan kata sandi</button></form><p id="lm" class="meta" role="status"></p></div>`;
   },
 
@@ -593,7 +599,7 @@ $("#theme").addEventListener("click", () => {
   d.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("hp_theme", d.dataset.theme); } catch {}
 });
 try { const t = localStorage.getItem("hp_theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
-if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistrations().then(r => r.forEach(x => x.unregister())).catch(() => {});
 addEventListener("DOMContentLoaded", route);
 </script>
 </body>
