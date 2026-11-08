@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HukumPedia — Kamus Hukum Indonesia</title>
+<meta name="description" content="Cari pasal, undang-undang, dan istilah hukum Indonesia untuk advokat dan mahasiswa hukum.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F6F1;--card:#fff;--ink:#0F172A;--mute:#334155;--line:#E2DED4;--gold:#D97706;--navy:#0F172A;--onnavy:#F8F6F1;--mark:#FDE7B8}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0B1220;--card:#131C2E;--ink:#F1EEE6;--mute:#A9B4C6;--line:#26324A;--navy:#070C16;--mark:#6B4A0E}}
+:root[data-theme=dark]{--bg:#0B1220;--card:#131C2E;--ink:#F1EEE6;--mute:#A9B4C6;--line:#26324A;--navy:#070C16;--mark:#6B4A0E}
+*{box-sizing:border-box}
+html{scroll-padding-top:90px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Plus Jakarta Sans",system-ui,sans-serif}
+a{color:inherit;text-decoration:none}
+h1,h2,h3,.serif{font-family:"Playfair Display",Georgia,serif;line-height:1.25}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+header{background:var(--navy);color:var(--onnavy);position:sticky;top:0;z-index:5;border-bottom:3px solid var(--gold)}
+.bar{max-width:920px;margin:0 auto;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.brand{font:700 22px "Playfair Display",serif;margin-right:auto}
+.brand span{color:var(--gold)}
+form.s{flex:1 1 280px;display:flex;gap:6px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:9px 12px}
+form.s input{flex:1;min-width:0}
+button,.btn{font:500 14px inherit;font-family:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:8px 12px}
+button.p{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
+nav{max-width:920px;margin:0 auto;padding:0 16px;display:flex;gap:4px;overflow-x:auto}
+nav a{padding:8px 14px;color:var(--onnavy);opacity:.75;border-bottom:3px solid transparent;white-space:nowrap;margin-bottom:-3px}
+nav a.on{opacity:1;border-color:var(--gold);font-weight:700}
+main{max-width:920px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--mute);margin:0 0 20px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}
+.item{display:block;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:6px;padding:14px 16px;margin:0 0 10px}
+.item:hover{border-color:var(--gold)}
+.item b{display:block}
+.item small,.meta{color:var(--mute);font-size:13px}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 9px;margin-right:6px;color:var(--mute)}
+.bab{margin:28px 0 10px;font-size:18px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.pasal{font:700 40px "Playfair Display",serif;color:var(--gold);margin:0}
+.text{font-family:"Playfair Display",Georgia,serif;font-size:19px;line-height:1.8;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:18px 20px;margin:14px 0;max-width:68ch}
+.pj{border-left:3px solid var(--line);padding-left:14px;color:var(--mute);max-width:68ch}
+mark{background:var(--mark);color:inherit;padding:0 2px;border-radius:2px}
+.crumb{font-size:14px;color:var(--mute);margin-bottom:14px;display:block}
+.empty{padding:28px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:6px}
+.note{background:var(--mark);border-radius:6px;padding:10px 14px;margin:0 0 18px;font-size:14px}
+dt{font:700 17px "Playfair Display",serif;margin-top:16px}
+dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
+.letter{font:700 26px "Playfair Display",serif;color:var(--gold);margin:26px 0 0;border-bottom:1px solid var(--line)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--onnavy);padding:9px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a class="brand" href="#/">Hukum<span>Pedia</span></a>
+    <form class="s" id="sf" role="search">
+      <input id="q" type="search" placeholder="Cari pasal, kata kunci, atau “pasal 338”" aria-label="Cari">
+      <button class="p" type="submit">Cari</button>
+    </form>
+    <button id="theme" type="button" aria-label="Ganti tema">Tema</button>
+  </div>
+  <nav id="nav">
+    <a href="#/" data-k="home">Peraturan</a>
+    <a href="#/kamus" data-k="kamus">Kamus</a>
+    <a href="#/simpan" data-k="simpan">Tersimpan</a>
+  </nav>
+</header>
+<main id="app"></main>
+<div id="toast" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* ====== ISI DUA NILAI INI (Supabase > Project Settings > API) ====== */
+const SUPABASE_URL = "";       // contoh: https://abcdxyz.supabase.co
+const SUPABASE_ANON_KEY = "";  // kunci "anon public" (aman untuk publik karena RLS hanya baca)
+/* =================================================================== */
+
+const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+/* Data contoh dipakai bila Supabase belum diisi */
+const DEMO = {
+  laws: [
+    {slug:"kuhp",short:"KUHP",title:"Kitab Undang-Undang Hukum Pidana (Wetboek van Strafrecht)",grp:"kitab",type:"KUHP",year:1946,subject:"Pidana",description:"Kodifikasi hukum pidana materiil warisan Belanda."},
+    {slug:"kuhperdata",short:"KUHPerdata",title:"Kitab Undang-Undang Hukum Perdata (Burgerlijk Wetboek)",grp:"kitab",type:"KUHPerdata",year:1847,subject:"Perdata",description:"Kodifikasi hukum perdata materiil."},
+    {slug:"kuhap",short:"KUHAP",title:"Undang-Undang Nomor 8 Tahun 1981 tentang Hukum Acara Pidana",grp:"kitab",type:"KUHAP",year:1981,subject:"Acara Pidana",description:"Hukum acara pidana nasional."}
+  ],
+  articles: [
+    {id:"kuhp-338",law_slug:"kuhp",pasal:"338",bab:"XIX",bab_title:"Kejahatan terhadap Nyawa",text:"Barang siapa dengan sengaja merampas nyawa orang lain, diancam karena pembunuhan dengan pidana penjara paling lama lima belas tahun.",penjelasan:"KUHP (WvS) tidak memiliki penjelasan resmi.",ord:1},
+    {id:"kuhp-362",law_slug:"kuhp",pasal:"362",bab:"XXII",bab_title:"Pencurian",text:"Barang siapa mengambil barang sesuatu, yang seluruhnya atau sebagian kepunyaan orang lain, dengan maksud untuk dimiliki secara melawan hukum, diancam karena pencurian, dengan pidana penjara paling lama lima tahun atau pidana denda paling banyak sembilan ratus rupiah.",penjelasan:"KUHP (WvS) tidak memiliki penjelasan resmi.",ord:2},
+    {id:"kuhperdata-1320",law_slug:"kuhperdata",pasal:"1320",bab:"II",bab_title:"Syarat Sahnya Perjanjian",text:"Supaya terjadi persetujuan yang sah, perlu dipenuhi empat syarat: 1. kesepakatan mereka yang mengikatkan dirinya; 2. kecakapan untuk membuat suatu perikatan; 3. suatu pokok persoalan tertentu; 4. suatu sebab yang tidak terlarang.",penjelasan:"Tidak ada penjelasan resmi.",ord:1},
+    {id:"kuhperdata-1365",law_slug:"kuhperdata",pasal:"1365",bab:"III",bab_title:"Perbuatan Melawan Hukum",text:"Tiap perbuatan melanggar hukum, yang membawa kerugian kepada orang lain, mewajibkan orang yang karena salahnya menerbitkan kerugian itu, mengganti kerugian tersebut.",penjelasan:"Tidak ada penjelasan resmi.",ord:2},
+    {id:"kuhap-184",law_slug:"kuhap",pasal:"184",bab:"XVI",bab_title:"Pembuktian",text:"(1) Alat bukti yang sah ialah: a. keterangan saksi; b. keterangan ahli; c. surat; d. petunjuk; e. keterangan terdakwa. (2) Hal yang secara umum sudah diketahui tidak perlu dibuktikan.",penjelasan:"Cukup jelas.",ord:1}
+  ],
+  glossary: [
+    {term:"Asas legalitas",definition:"Tiada perbuatan dapat dipidana kecuali berdasarkan aturan pidana yang telah ada sebelumnya."},
+    {term:"Nebis in idem",definition:"Seseorang tidak boleh dituntut dua kali untuk perbuatan yang sama yang telah diputus berkekuatan hukum tetap."},
+    {term:"Ultra petita",definition:"Putusan hakim yang melebihi apa yang dituntut atau diminta oleh para pihak."},
+    {term:"Dolus",definition:"Kesengajaan; unsur batin pelaku yang menghendaki dan mengetahui perbuatannya."},
+    {term:"Culpa",definition:"Kelalaian; kurang hati-hati sehingga menimbulkan akibat yang dilarang."},
+    {term:"Inkracht",definition:"Berkekuatan hukum tetap; putusan yang tidak dapat lagi diajukan upaya hukum biasa."},
+    {term:"In dubio pro reo",definition:"Dalam keraguan, putusan harus menguntungkan terdakwa."}
+  ]
+};
+
+/* ---------- Lapisan data ---------- */
+const must = ({data, error}) => { if (error) throw error; return data; };
+const clean = s => s.replace(/[,()%*]/g, " ").trim();
+const API = {
+  async laws() { return sb ? must(await sb.from("laws").select("*").order("year")) : DEMO.laws; },
+  async law(slug) { return sb ? must(await sb.from("laws").select("*").eq("slug", slug).maybeSingle()) : DEMO.laws.find(l => l.slug === slug); },
+  async articles(slug) { return sb ? must(await sb.from("articles").select("*").eq("law_slug", slug).order("ord")) : DEMO.articles.filter(a => a.law_slug === slug).sort((a, b) => a.ord - b.ord); },
+  async article(id) { return sb ? must(await sb.from("articles").select("*").eq("id", id).maybeSingle()) : DEMO.articles.find(a => a.id === id); },
+  async byIds(ids) { if (!ids.length) return []; return sb ? must(await sb.from("articles").select("*").in("id", ids)) : DEMO.articles.filter(a => ids.includes(a.id)); },
+  async glossary() { return sb ? must(await sb.from("glossary").select("*").order("term")) : [...DEMO.glossary].sort((a, b) => a.term.localeCompare(b.term)); },
+  async search(term) {
+    const t = clean(term), m = t.match(/^pasal\s+(\d+\w*)$/i);
+    if (!sb) {
+      const l = t.toLowerCase();
+      return {
+        articles: DEMO.articles.filter(a => m ? a.pasal.toLowerCase() === m[1].toLowerCase() : (a.text + " " + a.bab_title + " " + a.pasal).toLowerCase().includes(l)),
+        terms: DEMO.glossary.filter(g => (g.term + " " + g.definition).toLowerCase().includes(l))
+      };
+    }
+    const aq = sb.from("articles").select("*").limit(50);
+    const [articles, terms] = await Promise.all([
+      m ? aq.eq("pasal", m[1]) : aq.or(`text.ilike.%${t}%,bab_title.ilike.%${t}%,pasal.ilike.%${t}%`),
+      sb.from("glossary").select("*").or(`term.ilike.%${t}%,definition.ilike.%${t}%`).limit(20)
+    ]);
+    return { articles: must(articles), terms: must(terms) };
+  }
+};
+
+/* ---------- Util ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const hl = (t, q) => { t = esc(t); if (!q) return t; const r = q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); return r ? t.replace(new RegExp("(" + r + ")", "gi"), "<mark>$1</mark>") : t; };
+const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1800); };
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem("hp_bm") || "[]"); } catch { return []; } },
+  set(v) { try { localStorage.setItem("hp_bm", JSON.stringify(v)); } catch {} }
+};
+const lawCache = {};
+async function lawOf(slug) { return lawCache[slug] ||= await API.law(slug); }
+const mode = () => sb ? "" : `<p class="note">Mode contoh: Supabase belum dihubungkan, sehingga yang tampil hanya beberapa pasal contoh. Isi <b>SUPABASE_URL</b> dan <b>SUPABASE_ANON_KEY</b> di index.html.</p>`;
+const empty = m => `<div class="empty">${m}</div>`;
+const artItem = async (a, q) => { const l = await lawOf(a.law_slug); return `<a class="item" href="#/a/${encodeURIComponent(a.id)}"><b class="serif">Pasal ${esc(a.pasal)} ${esc(l ? l.short : "")}</b><small>${esc(a.bab_title || "")}</small><div>${hl(a.text.length > 180 ? a.text.slice(0, 180) + "…" : a.text, q)}</div></a>`; };
+
+/* ---------- Tampilan ---------- */
+const V = {
+  async home() {
+    const laws = await API.laws();
+    const grp = (g, title) => { const L = laws.filter(l => l.grp === g); return L.length ? `<h2 class="bab">${title}</h2>` + L.map(l => `<a class="item" href="#/law/${l.slug}"><b class="serif">${esc(l.short)}</b><small>${esc(l.title)}</small><div class="meta"><span class="tag">${esc(l.subject || "")}</span>${l.year || ""}</div></a>`).join("") : ""; };
+    return `<h1>Pasal yang Anda cari, langsung ketemu.</h1><p class="sub">Kitab hukum dan peraturan perundang-undangan Indonesia untuk advokat dan mahasiswa hukum.</p>${mode()}${grp("kitab", "Kitab hukum")}${grp("peraturan", "Peraturan perundang-undangan")}${laws.length ? "" : empty("Belum ada peraturan. Jalankan supabase-schema.sql di Supabase.")}`;
+  },
+  async law(slug) {
+    const [l, arts] = await Promise.all([API.law(slug), API.articles(slug)]);
+    if (!l) return empty("Peraturan tidak ditemukan.");
+    let html = `<a class="crumb" href="#/">← Semua peraturan</a><h1>${esc(l.short)}</h1><p class="sub">${esc(l.title)}</p><p class="pj">${esc(l.description || "")}</p>`, last = null;
+    for (const a of arts) {
+      const key = (a.bab || "") + a.bab_title;
+      if (key !== last) { html += `<h2 class="bab">${a.bab ? "Bab " + esc(a.bab) + " — " : ""}${esc(a.bab_title || "")}</h2>`; last = key; }
+      html += await artItem(a);
+    }
+    return html + (arts.length ? "" : empty("Belum ada pasal untuk peraturan ini."));
+  },
+  async article(id) {
+    const a = await API.article(id);
+    if (!a) return empty("Pasal tidak ditemukan.");
+    const l = await lawOf(a.law_slug), saved = store.get().includes(a.id);
+    return `<a class="crumb" href="#/law/${a.law_slug}">← ${esc(l ? l.short : "Kembali")}</a><p class="meta">${a.bab ? "Bab " + esc(a.bab) + " · " : ""}${esc(a.bab_title || "")}</p><h1 class="pasal">Pasal ${esc(a.pasal)}</h1><p class="sub">${esc(l ? l.title : "")}</p>
+    <div class="row"><button class="p" data-act="copy">Salin teks</button><button data-act="cite">Salin kutipan</button><button data-act="bm">${saved ? "Hapus dari tersimpan" : "Simpan pasal"}</button></div>
+    <div class="text" id="pt">${esc(a.text)}</div><h2 style="font-size:18px">Penjelasan</h2><p class="pj">${esc(a.penjelasan || "Cukup jelas.")}</p>
+    <p class="meta">Teks di aplikasi ini bersifat rujukan. Verifikasi ke sumber resmi (JDIH atau peraturan.go.id) sebelum dipakai dalam dokumen hukum.</p>`;
+  },
+  async search(term) {
+    const r = await API.search(term);
+    let html = `<h1>Hasil untuk “${esc(term)}”</h1><p class="sub">${r.articles.length} pasal, ${r.terms.length} istilah</p>${mode()}`;
+    if (r.terms.length) html += `<h2 class="bab">Istilah</h2><dl>` + r.terms.map(g => `<dt>${hl(g.term, term)}</dt><dd>${hl(g.definition, term)}</dd>`).join("") + `</dl>`;
+    if (r.articles.length) html += `<h2 class="bab">Pasal</h2>` + (await Promise.all(r.articles.map(a => artItem(a, term)))).join("");
+    return html + (r.articles.length || r.terms.length ? "" : empty("Tidak ada hasil. Coba kata kunci lain atau format “pasal 338”."));
+  },
+  async kamus() {
+    const g = await API.glossary();
+    let html = `<h1>Kamus istilah hukum</h1><p class="sub">Istilah Latin dan istilah teknis, urut abjad.</p>${mode()}<input id="kf" type="search" placeholder="Saring istilah…" aria-label="Saring istilah" style="width:100%;max-width:360px"><div id="kl"></div>`;
+    V.kamusData = g; return html;
+  },
+  kamusList(f) {
+    const g = V.kamusData.filter(x => (x.term + x.definition).toLowerCase().includes(f.toLowerCase())); let cur = "";
+    return g.length ? "<dl>" + g.map(x => { const L = x.term[0].toUpperCase(); const h = L !== cur ? `<div class="letter">${L}</div>` : ""; cur = L; return h + `<dt>${esc(x.term)}</dt><dd>${esc(x.definition)}</dd>`; }).join("") + "</dl>" : empty("Istilah tidak ditemukan.");
+  },
+  async simpan() {
+    const arts = await API.byIds(store.get());
+    return `<h1>Pasal tersimpan</h1><p class="sub">Tersimpan di peramban ini saja.</p>` + (arts.length ? (await Promise.all(arts.map(a => artItem(a)))).join("") : empty("Belum ada pasal tersimpan. Buka sebuah pasal lalu pilih “Simpan pasal”."));
+  }
+};
+
+/* ---------- Router ---------- */
+let cur = null;
+async function route() {
+  const h = decodeURIComponent(location.hash.slice(1) || "/"), p = h.split("/").filter(Boolean), app = $("#app");
+  const k = !p.length ? "home" : p[0] === "kamus" ? "kamus" : p[0] === "simpan" ? "simpan" : "";
+  document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.k === k));
+  app.innerHTML = `<p class="sub">Memuat…</p>`;
+  try {
+    if (!p.length) app.innerHTML = await V.home();
+    else if (p[0] === "law") app.innerHTML = await V.law(p[1]);
+    else if (p[0] === "a") { app.innerHTML = await V.article(p.slice(1).join("/")); cur = await API.article(p.slice(1).join("/")); }
+    else if (p[0] === "cari") { $("#q").value = p.slice(1).join("/"); app.innerHTML = await V.search(p.slice(1).join("/")); }
+    else if (p[0] === "kamus") { app.innerHTML = await V.kamus(); const L = () => $("#kl").innerHTML = V.kamusList($("#kf").value); $("#kf").oninput = L; L(); }
+    else if (p[0] === "simpan") app.innerHTML = await V.simpan();
+    else app.innerHTML = empty("Halaman tidak ditemukan.");
+  } catch (e) {
+    console.error(e);
+    app.innerHTML = empty("Data gagal dimuat. Periksa SUPABASE_URL, SUPABASE_ANON_KEY, dan apakah supabase-schema.sql sudah dijalankan.");
+  }
+  window.scrollTo(0, 0);
+}
+addEventListener("hashchange", route);
+
+/* ---------- Aksi ---------- */
+$("#sf").addEventListener("submit", e => { e.preventDefault(); const v = $("#q").value.trim(); if (v) location.hash = "#/cari/" + encodeURIComponent(v); });
+$("#theme").addEventListener("click", () => {
+  const d = document.documentElement, dark = getComputedStyle(d).getPropertyValue("--bg").trim() === "#0B1220";
+  d.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("hp_theme", d.dataset.theme); } catch {}
+});
+try { const t = localStorage.getItem("hp_theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+$("#app").addEventListener("click", async e => {
+  const act = e.target.dataset.act; if (!act || !cur) return;
+  const l = await lawOf(cur.law_slug), cite = `Pasal ${cur.pasal} ${l ? l.title : ""}`;
+  if (act === "copy") { await navigator.clipboard.writeText(`Pasal ${cur.pasal} ${l ? l.short : ""}\n${cur.text}`); toast("Teks disalin"); }
+  if (act === "cite") { await navigator.clipboard.writeText(cite); toast("Kutipan disalin"); }
+  if (act === "bm") { const s = store.get(), i = s.indexOf(cur.id); i < 0 ? s.push(cur.id) : s.splice(i, 1); store.set(s); e.target.textContent = i < 0 ? "Hapus dari tersimpan" : "Simpan pasal"; toast(i < 0 ? "Pasal disimpan" : "Pasal dihapus"); }
+});
+route();
+</script>
+</body>
+</html>
