@@ -58,6 +58,7 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 .letter{font:700 26px "Playfair Display",serif;color:var(--gold);margin:26px 0 0;border-bottom:1px solid var(--line)}
 .chips{display:flex;flex-wrap:wrap;gap:4px;margin:14px 0}
 .chip{padding:4px 9px;min-width:34px}.chip.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+.bk{display:flex;flex-direction:column}.bk .book{flex:1}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
 .book{display:block;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .book:hover{border-color:var(--gold)}
@@ -102,6 +103,7 @@ const SUPABASE_KEY = "sb_publishable_Z-xJzXWqdLBn5nsqNSC3vA_gok7JcEA";
 
 const sb = (SUPABASE_URL && SUPABASE_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 let USER = null, ROLE = null, RECOVERY = false, VIEW = null, cur = null, loginMode = "in", KL = "", EDIT = false;
+const KF = { sel: new Set(), selecting: false };
 const isAdmin = () => ROLE === "admin";
 
 /* ---------- Util ---------- */
@@ -205,7 +207,7 @@ const V = {
   async pasal(q) {
     const laws = await API.laws(); laws.forEach(l => lawCache[l.slug] = l);
     let h = `<h1>Cari pasal</h1><p class="sub">Ketik kata kunci. Semua pasal yang memuatnya tampil, dikelompokkan per peraturan beserta sumbernya.</p>
-    <form id="sf" class="row"><input id="q" type="search" value="${esc(q)}" placeholder="Contoh: penyidikan, wanprestasi, pasal 338" aria-label="Kata kunci" style="flex:1 1 240px"><button class="p" type="submit">Cari</button></form>`;
+    <form id="sf" class="row"><input id="q" type="search" value="${esc(q)}" placeholder="Contoh: penyidikan, wanprestasi, pasal 338" aria-label="Kata kunci" style="flex:1 1 240px"><button class="p" type="submit">Cari</button></form>${isAdmin() ? `<div class="row"><button class="p" data-act="adddoc" data-j="peraturan">+ Tambah peraturan (PDF)</button></div><div id="addbox"></div>` : ""}`;
     if (!q) { const L = laws.filter(l => l.grp === "peraturan"); return h + `<h2 class="bab">Peraturan perundang-undangan</h2>` + (L.length ? L.map(lawItem).join("") : empty("Belum ada peraturan. Editor dapat menambahkannya lewat menu Editor.")); }
     const r = await API.search(q), by = {};
     r.articles.forEach(a => (by[a.law_slug] ||= []).push(a));
@@ -218,7 +220,7 @@ const V = {
     const [l, arts] = await Promise.all([lawOf(slug), API.articles(slug)]);
     if (!l) return empty("Peraturan tidak ditemukan.");
     let h = `<a class="crumb" href="#/">← Pasal</a><h1>${esc(l.short)}</h1><p class="sub">${esc(l.title)}</p><p class="pj">${esc(l.description || "")}</p>
-    <div class="row">${l.pdf_path ? `<button class="p" data-act="openpdf" data-s="${esc(slug)}">Buka PDF</button><button data-act="dlpdf" data-s="${esc(slug)}">Unduh PDF</button>` : ""}<button data-act="dltxt" data-s="${esc(slug)}">Unduh teks (.txt)</button>${isAdmin() ? `<button data-act="addart" data-s="${esc(slug)}">+ Tambah pasal</button>` : ""}</div><div id="addbox"></div>`, last = null;
+    <div class="row">${l.pdf_path ? `<button class="p" data-act="openpdf" data-s="${esc(slug)}">Buka PDF</button><button data-act="dlpdf" data-s="${esc(slug)}">Unduh PDF</button>` : ""}<button data-act="dltxt" data-s="${esc(slug)}">Unduh teks (.txt)</button>${isAdmin() ? `<button data-act="addart" data-s="${esc(slug)}">+ Tambah pasal</button><button data-act="editdoc" data-s="${esc(slug)}">Edit info</button><button data-act="deldoc" data-s="${esc(slug)}">Hapus dokumen</button>` : ""}</div><div id="addbox"></div>`, last = null;
     for (const a of arts) { const key = (a.bab || "") + a.bab_title; if (key !== last) { h += `<h2 class="bab">${a.bab ? "Bab " + esc(a.bab) + " — " : ""}${esc(a.bab_title || "")}</h2>`; last = key; } h += card(a, l, "") + (isAdmin() ? `<div class="row" style="margin:-4px 0 12px"><button data-act="gotoedit" data-id="${esc(a.id)}">Edit pasal</button></div>` : ""); }
     return h + (arts.length ? "" : empty("Belum ada pasal untuk peraturan ini."));
   },
@@ -232,9 +234,12 @@ const V = {
     <p class="meta">Teks bersifat rujukan. Verifikasi ke sumber resmi (JDIH atau peraturan.go.id) sebelum dipakai dalam dokumen hukum.</p>`;
   },
   async kitab() {
-    const L = (await API.laws()).filter(l => l.grp === "kitab");
-    return `<h1>Kitab</h1><p class="sub">Etalase kitab dan buku hukum. Klik kartu untuk membaca PDF-nya di sini, lengkap dengan pencarian dan unduhan.</p>` +
-      (L.length ? `<div class="grid">` + L.map(l => `<a class="book" href="#/kitab/${esc(l.slug)}"><div class="cv">${esc(l.short)}</div><div class="bd"><b class="serif">${esc(l.title)}</b><div class="meta">${esc([l.subject, l.year].filter(Boolean).join(" · "))}${l.pdf_path ? "" : " · PDF belum ada"}</div></div></a>`).join("") + `</div>` : empty("Belum ada kitab. Editor dapat menambahkannya lewat menu Editor."));
+    V.kl = (await API.laws()).filter(l => l.grp === "kitab"); KF.sel.clear(); KF.selecting = false;
+    const subs = [...new Set(V.kl.map(l => l.subject).filter(Boolean))].sort();
+    return `<h1>Kitab</h1><p class="sub">Etalase kitab dan buku hukum. Klik kartu untuk membaca PDF-nya di sini, lengkap dengan pencarian dan unduhan.</p>
+    <div class="row"><input id="kq" type="search" placeholder="Cari judul, penulis, atau bidang…" aria-label="Cari kitab" style="flex:1 1 220px"><select id="ks" aria-label="Filter bidang"><option value="">Semua bidang</option>${subs.map(x => `<option>${esc(x)}</option>`).join("")}</select><select id="ko" aria-label="Urutkan"><option value="new">Tahun terbaru</option><option value="az">Judul A–Z</option></select></div>
+    ${isAdmin() ? `<div class="row"><button class="p" data-act="adddoc" data-j="kitab">+ Tambah kitab (PDF)</button><button data-act="selmode" id="selb">Pilih</button><button data-act="delsel" id="delb" hidden>Hapus terpilih (0)</button></div>` : ""}
+    <div id="addbox"></div><p id="kn" class="meta"></p><div class="grid" id="kg"></div>`;
   },
   async kitabView(app, slug, start) {
     const l = await lawOf(slug); if (!l) { app.innerHTML = empty("Dokumen tidak ditemukan."); return; }
@@ -253,6 +258,13 @@ const V = {
     return `<h1>Pasal tersimpan</h1><p class="sub">Tersimpan di peramban ini saja.</p>` + (arts.length ? arts.map(a => card(a, lawCache[a.law_slug], "")).join("") : empty("Belum ada pasal tersimpan. Buka sebuah pasal lalu pilih “Simpan pasal”."));
   }
 };
+function paintKitab() {
+  const q = $("#kq").value.toLowerCase(), sj = $("#ks").value, so = $("#ko").value;
+  const L = V.kl.filter(l => (!sj || l.subject === sj) && [l.title, l.short, l.author, l.subject, l.description].join(" ").toLowerCase().includes(q));
+  L.sort(so === "az" ? (a, b) => a.title.localeCompare(b.title) : (a, b) => (b.year || 0) - (a.year || 0));
+  $("#kn").textContent = L.length + " kitab";
+  $("#kg").innerHTML = L.length ? L.map(l => `<div class="bk"><a class="book" href="#/kitab/${esc(l.slug)}"><div class="cv">${esc(l.short)}</div><div class="bd"><b class="serif">${esc(l.title)}</b><div class="meta">${esc([l.author, l.subject, l.year].filter(Boolean).join(" · "))}${l.pdf_path ? "" : " · PDF belum ada"}</div></div></a>${isAdmin() ? `<div class="row" style="margin:6px 0 0">${KF.selecting ? `<label><input type="checkbox" data-sel="${esc(l.slug)}" ${KF.sel.has(l.slug) ? "checked" : ""}> Pilih</label>` : ""}<button data-act="editdoc" data-s="${esc(l.slug)}">Edit</button><button data-act="deldoc" data-s="${esc(l.slug)}">Hapus</button></div>` : ""}</div>`).join("") : empty(V.kl.length ? "Tidak ada kitab yang cocok." : "Belum ada kitab. Editor dapat menambahkannya dengan tombol “Tambah kitab”.");
+}
 function paintKamus() {
   const f = $("#kf").value.toLowerCase(), L = t => /[A-Za-z]/.test(t[0]) ? t[0].toUpperCase() : "#", have = new Set(V.kd.map(x => L(x.term)));
   $("#kc").innerHTML = `<button class="chip ${KL ? "" : "on"}" data-l="">Semua</button>` + [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].map(c => `<button class="chip ${KL === c ? "on" : ""}" data-l="${c}" ${have.has(c) ? "" : "disabled"}>${c}</button>`).join("");
@@ -364,59 +376,90 @@ function parseArticles(pages, slug) {
 }
 
 /* ---------- Panel editor (admin) ---------- */
+/* ---------- Metadata otomatis dari PDF (ala Mendeley) ---------- */
+const tcase = t => t.toLowerCase().replace(/(^|[\s(-])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Dan|Atas|Dengan|Yang|Di|Ke|Dari|Untuk|Pada|Tentang|Atau)\b/g, w => w.toLowerCase());
+async function extractMeta(file) {
+  const lib = await pdfjs(), doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const info = (await doc.getMetadata().catch(() => ({}))).info || {}; let txt = "";
+  for (let i = 1; i <= Math.min(3, doc.numPages); i++) txt += (await (await doc.getPage(i)).getTextContent()).items.map(it => it.str).join(" ") + "\n";
+  const flat = txt.replace(/\s+/g, " "), out = { pages: doc.numPages };
+  const m = flat.match(/(UNDANG[- ]UNDANG|PERATURAN PEMERINTAH|PERATURAN PRESIDEN|PERATURAN MENTERI [A-Z ]{3,60}?|PERATURAN DAERAH [A-Z ]{3,40}?|KEPUTUSAN PRESIDEN)\s+(?:REPUBLIK INDONESIA\s+)?NOMOR\s+(\d+[A-Za-z]?)\s+TAHUN\s+((?:19|20)\d{2})\s+TENTANG\s+(.{5,160}?)(?=\s+(?:DENGAN|PRESIDEN REPUBLIK|MENIMBANG|BAB I)\b|$)/i);
+  if (m) {
+    const k = m[1].toUpperCase(), ab = /UNDANG/.test(k) ? "UU" : /PEMERINTAH/.test(k) ? "PP" : /MENTERI/.test(k) ? "Permen" : /DAERAH/.test(k) ? "Perda" : /PERATURAN PRESIDEN/.test(k) ? "Perpres" : "Keppres";
+    const tent = tcase(m[4].trim()); Object.assign(out, { isUU: true, title: `${tcase(m[1])} Nomor ${m[2]} Tahun ${m[3]} tentang ${tent}`, short: `${ab} ${m[2]}/${m[3]}`, year: m[3], subject: /pidana|narkotika|korupsi/i.test(tent) ? "Pidana" : /perdata|perkawinan|waris|keluarga/i.test(tent) ? "Perdata" : /pajak/i.test(tent) ? "Pajak" : /ketenagakerjaan|tenaga kerja/i.test(tent) ? "Ketenagakerjaan" : "" });
+    return out;
+  }
+  const clean = t => (t || "").replace(/^Microsoft Word - /i, "").replace(/\.(pdf|docx?)$/i, "").replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+  let t = clean(info.Title); if (t.length < 4 || /^untitled/i.test(t)) t = clean(file.name);
+  const y = (flat.match(/\b(19[5-9]\d|20[0-3]\d)\b/) || [])[1] || (String(info.CreationDate || "").match(/D:(\d{4})/) || [])[1] || "";
+  return Object.assign(out, { title: t, short: t.length <= 18 ? t : t.split(" ").slice(0, 3).join(" ").slice(0, 22), author: clean(info.Author), year: y });
+}
+async function autofill(file) {
+  say("d-st", "Membaca metadata PDF…");
+  try {
+    const m = await extractMeta(file), set = (id, v) => { if (v && !$("#" + id).value) $("#" + id).value = v; };
+    set("d-title", m.title); set("d-short", m.short); set("d-author", m.author); set("d-year", m.year); set("d-subject", m.subject);
+    if (m.isUU && !$("#d-slug").value) { $("#d-grp").value = "peraturan"; $("#d-parse").checked = true; }
+    say("d-st", `Terbaca otomatis (${m.pages} halaman)${m.isUU ? ", terdeteksi sebagai peraturan dan pemecahan per pasal diaktifkan" : ""}. Periksa dan sunting bila perlu.`);
+  } catch (e) { say("d-st", "Metadata tidak terbaca otomatis; isi manual."); }
+}
+const docForm = l => `<form id="df" class="frm" style="margin:14px 0;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:6px"><h3 style="margin:0">${l ? "Edit info dokumen" : "Tambah dokumen dari PDF"}</h3>
+  <input type="hidden" id="d-slug" value="${esc(l?.slug || "")}">
+  <label class="meta">${l ? "Ganti file PDF (opsional)" : "File PDF"}<input id="d-file" type="file" accept="application/pdf" style="display:block;width:100%"></label><p id="d-st" class="meta" role="status"></p>
+  <input id="d-title" placeholder="Judul lengkap" required value="${esc(l?.title || "")}"><input id="d-short" placeholder="Nama singkat (mis. UU 20/2025 atau KUHP)" required value="${esc(l?.short || "")}"><input id="d-author" placeholder="Penulis / penerbit (opsional)" value="${esc(l?.author || "")}">
+  <div class="row" style="margin:0"><input id="d-year" type="number" placeholder="Tahun" value="${l?.year ?? ""}" style="width:110px"><input id="d-subject" placeholder="Bidang, mis. Pidana" value="${esc(l?.subject || "")}" style="flex:1"></div>
+  <select id="d-grp" aria-label="Jenis"><option value="kitab">Kitab / buku (tampil di menu Kitab)</option><option value="peraturan">Peraturan / undang-undang (tampil di menu Pasal)</option></select>
+  <textarea id="d-desc" rows="2" placeholder="Deskripsi singkat (opsional)">${esc(l?.description || "")}</textarea>
+  <label><input id="d-parse" type="checkbox"> Baca isi PDF dan pecah per pasal otomatis${l ? " (menggantikan pasal lama)" : ""}</label>
+  <div class="row" style="margin:0"><button class="p" type="submit">Simpan</button><button type="button" data-act="cancelEdit">Batal</button></div></form>`;
+async function saveDoc() {
+  const st = m => say("d-st", m), old = val("d-slug"), file = $("#d-file").files[0], parse = $("#d-parse").checked;
+  const base = { short: val("d-short"), title: val("d-title"), author: val("d-author") || null, grp: $("#d-grp").value, type: val("d-short"), year: +val("d-year") || null, subject: val("d-subject") || null, description: val("d-desc") || null };
+  let slug = old;
+  if (!old) {
+    if (!file) return st("Pilih file PDF dulu.");
+    const ex = (await API.laws()).map(l => l.slug), b0 = slugify(base.short) || slugify(base.title).slice(0, 40) || "dokumen"; slug = b0; for (let i = 2; ex.includes(slug); i++) slug = b0 + "-" + i;
+  }
+  if (parse && !file) return st("Pilih file PDF untuk dibaca per pasal.");
+  const btn = $("#df button.p"); btn.disabled = true;
+  try {
+    st("Menyimpan data…"); const r = await sb.from("laws").upsert({ slug, ...base }); if (r.error) throw r.error;
+    let n = 0, scan = false;
+    if (file && parse) {
+      const pages = await pdfPages(file, (i, t) => st(`Membaca halaman ${i} dari ${t}…`));
+      if (pages.join("").length < 100) scan = true;
+      else {
+        const rows = parseArticles(pages, slug); n = rows.length;
+        if (old) { const d = await sb.from("articles").delete().eq("law_slug", slug); if (d.error) throw d.error; }
+        for (let i = 0; i < rows.length; i += 100) { const x = await sb.from("articles").upsert(rows.slice(i, i + 100)); if (x.error) throw x.error; }
+      }
+    }
+    if (file) {
+      st("Mengunggah PDF…"); const u = await sb.storage.from("documents").upload(slug + ".pdf", file, { upsert: true, contentType: "application/pdf" }); if (u.error) throw u.error;
+      const r2 = await sb.from("laws").update({ pdf_path: slug + ".pdf" }).eq("slug", slug); if (r2.error) throw r2.error;
+    }
+    delete lawCache[slug]; toast(scan ? "Tersimpan. PDF hasil scan tidak dipecah per pasal." : n ? `Tersimpan: ${n} entri pasal.` : "Tersimpan."); route();
+  } catch (e) { st("Gagal: " + esc(e.message || e)); btn.disabled = false; }
+}
+async function delDocs(slugs) {
+  const laws = await Promise.all(slugs.map(s => API.law(s))), paths = laws.filter(l => l && l.pdf_path).map(l => l.pdf_path);
+  const r = await sb.from("laws").delete().in("slug", slugs); if (r.error) throw r.error;
+  if (paths.length) await sb.storage.from("documents").remove(paths);
+  slugs.forEach(x => delete lawCache[x]);
+}
+
+/* ---------- Panel editor (admin) ---------- */
 V.admin = async function (app) {
   if (!isAdmin()) { app.innerHTML = empty("Halaman ini khusus editor (admin)."); return; }
-  const laws = await API.laws(), opts = laws.map(l => `<option value="${esc(l.slug)}">${esc(l.short)}</option>`).join("");
   app.innerHTML = `<h1>Panel editor</h1><p id="msg" class="note" role="status" hidden></p>
   <h2 class="bab">1. Tambah dokumen dari PDF</h2>
-  <div class="frm">
-    <select id="tl" aria-label="Dokumen"><option value="">+ Dokumen baru</option>${opts}</select>
-    <select id="mode" aria-label="Cara impor"><option value="pasal">Peraturan / undang-undang: baca dan pecah per pasal</option><option value="kitabpasal">Kitab hukum: baca dan pecah per pasal</option><option value="kitab">Kitab / buku: simpan PDF saja (pratinjau dan unduh)</option></select>
-    <div id="nl" class="frm"><input id="n-short" placeholder="Nama singkat, mis. UU 20/2025 atau KUHP"><input id="n-title" placeholder="Judul lengkap"><input id="n-year" type="number" placeholder="Tahun"><input id="n-subject" placeholder="Bidang, mis. Pidana"><textarea id="n-desc" rows="2" placeholder="Deskripsi singkat (opsional)"></textarea></div>
-    <label id="rpl"><input id="rp" type="checkbox" checked> Ganti semua pasal lama dokumen ini</label>
-    <input id="pf" type="file" accept="application/pdf"><button class="p" id="pr" type="button">Baca dan simpan</button>
-  </div><div id="pv"></div>
-  <h2 class="bab">2. Kelola peraturan dan kitab</h2>
-  <div class="row"><select id="ml" aria-label="Dokumen">${opts}</select><button id="ei" type="button">Edit info</button><button id="dl" type="button">Hapus dokumen</button></div>
-  <form id="inf" class="frm" hidden><input id="i-short" placeholder="Nama singkat" required><input id="i-title" placeholder="Judul lengkap" required><select id="i-grp"><option value="peraturan">Peraturan</option><option value="kitab">Kitab</option></select><input id="i-year" type="number" placeholder="Tahun"><input id="i-subject" placeholder="Bidang"><textarea id="i-desc" rows="2" placeholder="Deskripsi"></textarea><button class="p">Simpan info</button></form>
-  <p class="meta">Untuk mengubah, menambah, atau menghapus pasal: buka peraturannya di menu Pasal. Tombol edit hanya muncul untuk editor.</p>
-  <h2 class="bab">3. Kelola kamus</h2>
+  <p class="meta">Pilih PDF dan judul, tahun, serta jenisnya terbaca otomatis; semua isian tetap bisa Anda sunting. Untuk mengubah atau menghapus dokumen, pakai tombol Edit dan Hapus pada kartunya di menu Kitab atau di halaman peraturannya. Pasal diubah langsung di halaman pasalnya.</p>
+  <div class="row"><button class="p" data-act="adddoc" data-j="kitab">+ Tambah kitab / buku</button><button class="p" data-act="adddoc" data-j="peraturan">+ Tambah peraturan / UU</button></div><div id="addbox"></div>
+  <h2 class="bab">2. Kelola kamus</h2>
   <div class="gbox" id="glist"></div>
   <form id="gf" class="frm" style="margin-top:10px"><input type="hidden" id="g-old"><input id="g-term" placeholder="Istilah" required><textarea id="g-def" rows="3" placeholder="Arti" required></textarea><button class="p">Simpan istilah</button></form>`;
   const fail = e => { const m = $("#msg"); m.hidden = false; m.textContent = "Gagal: " + (e.message || e); window.scrollTo(0, 0); };
   const ok = t => { const m = $("#msg"); m.hidden = false; m.textContent = t; toast(t); };
-  const sync = () => { const ex = !!$("#tl").value; $("#nl").hidden = ex; $("#rpl").hidden = !ex || $("#mode").value === "kitab"; }; $("#tl").onchange = $("#mode").onchange = sync; sync();
-
-  async function saveDoc(slug, file, rows, isNew) {
-    if (isNew) must(await sb.from("laws").upsert({ slug, short: val("n-short"), title: val("n-title"), grp: $("#mode").value === "pasal" ? "peraturan" : "kitab", type: val("n-short"), year: +val("n-year") || null, subject: val("n-subject"), description: val("n-desc") }));
-    if (rows.length) {
-      if (!isNew && $("#rp").checked) { const d = await sb.from("articles").delete().eq("law_slug", slug); if (d.error) throw d.error; }
-      for (let i = 0; i < rows.length; i += 100) { const r = await sb.from("articles").upsert(rows.slice(i, i + 100)); if (r.error) throw r.error; }
-    }
-    const u = await sb.storage.from("documents").upload(slug + ".pdf", file, { upsert: true, contentType: "application/pdf" }); if (u.error) throw u.error;
-    const r = await sb.from("laws").update({ pdf_path: slug + ".pdf" }).eq("slug", slug); if (r.error) throw r.error;
-    delete lawCache[slug];
-  }
-  let draft = null;
-  $("#pr").onclick = async () => {
-    try {
-      const file = $("#pf").files[0]; if (!file) return say("pv", `<p class="note">Pilih file PDF dulu.</p>`);
-      const ex = $("#tl").value, isNew = !ex, slug = ex || slugify(val("n-short")), mode = $("#mode").value;
-      if (isNew && (!val("n-short") || !val("n-title") || !slug)) return say("pv", `<p class="note">Nama singkat dan judul wajib diisi.</p>`);
-      if (isNew && laws.some(l => l.slug === slug)) return say("pv", `<p class="note">Dokumen dengan nama itu sudah ada. Pilih dari daftar di atas.</p>`);
-      if (mode === "kitab") { say("pv", `<p class="sub">Mengunggah PDF…</p>`); await saveDoc(slug, file, [], isNew); return say("pv", `<p class="note">PDF tersimpan. Buka menu Kitab untuk melihatnya.</p>`); }
-      const pages = await pdfPages(file, (i, n) => say("pv", `<p class="sub">Membaca halaman ${i} dari ${n}…</p>`));
-      if (pages.join("").length < 100) return say("pv", `<p class="note">PDF ini tampaknya hasil scan tanpa lapisan teks, sehingga belum bisa dibaca. Perlu OCR atau PDF versi teks. Anda tetap bisa memakai mode "simpan PDF saja".</p>`);
-      draft = { slug, file, isNew, rows: parseArticles(pages, slug) };
-      const hal = draft.rows[0]?.pasal.startsWith("Hal.");
-      say("pv", `<p class="note">Ditemukan <b>${draft.rows.length}</b> ${hal ? "halaman (pola “Pasal N” tidak terdeteksi)" : "entri pasal"}. Contoh: ${draft.rows.slice(0, 3).map(r => esc(r.pasal) + ": " + esc(r.text.slice(0, 70)) + "…").join(" | ")}</p><button class="p" id="sv" type="button">Simpan semua ke database</button>`);
-      $("#sv").onclick = async () => { try { say("pv", `<p class="sub">Menyimpan…</p>`); await saveDoc(draft.slug, draft.file, draft.rows, draft.isNew); say("pv", `<p class="note">Tersimpan: ${draft.rows.length} entri. Sudah bisa dicari. <a href="#/law/${esc(draft.slug)}"><u>Lihat</u></a></p>`); } catch (e) { say("pv", ""); fail(e); } };
-    } catch (e) { say("pv", ""); fail(e); }
-  };
-
-  $("#dl").onclick = async () => { const s = $("#ml").value; if (s && confirm("Hapus dokumen " + s + " beserta semua pasalnya?")) { const r = await sb.from("laws").delete().eq("slug", s); r.error ? fail(r.error) : location.reload(); } };
-  $("#ei").onclick = async () => { const l = await API.law($("#ml").value); if (!l) return; $("#inf").hidden = false; $("#i-short").value = l.short; $("#i-title").value = l.title; $("#i-grp").value = l.grp; $("#i-year").value = l.year ?? ""; $("#i-subject").value = l.subject ?? ""; $("#i-desc").value = l.description ?? ""; };
-  $("#inf").onsubmit = async e => { e.preventDefault(); const s = $("#ml").value, r = await sb.from("laws").update({ short: val("i-short"), title: val("i-title"), grp: $("#i-grp").value, type: val("i-short"), year: +val("i-year") || null, subject: val("i-subject"), description: val("i-desc") }).eq("slug", s); if (r.error) return fail(r.error); delete lawCache[s]; ok("Info tersimpan."); };
   const gl = async () => {
     const g = await API.glossary();
     $("#glist").innerHTML = g.length ? "<dl>" + g.map(x => `<dt>${esc(x.term)}</dt><dd>${esc(x.definition)}</dd><div class="row" style="margin:4px 0 0"><button data-ge="${x.id}" type="button">Ubah</button><button data-gd="${x.id}" type="button">Hapus</button></div>`).join("") + "</dl>" : empty("Belum ada istilah.");
@@ -458,7 +501,7 @@ async function route() {
     else if (p[0] === "cari") app.innerHTML = await V.pasal(p.slice(1).join("/"));
     else if (p[0] === "law") app.innerHTML = await V.law(p[1]);
     else if (p[0] === "a") app.innerHTML = await V.article(p.slice(1).join("/"));
-    else if (p[0] === "kitab") { if (p[1]) await V.kitabView(app, p[1], +p[2] || 0); else app.innerHTML = await V.kitab(); }
+    else if (p[0] === "kitab") { if (p[1]) await V.kitabView(app, p[1], +p[2] || 0); else { app.innerHTML = await V.kitab(); $("#kq").oninput = $("#ks").onchange = $("#ko").onchange = paintKitab; paintKitab(); } }
     else if (p[0] === "kamus") { app.innerHTML = await V.kamus(); $("#kf").oninput = paintKamus; paintKamus(); }
     else if (p[0] === "simpan") app.innerHTML = await V.simpan();
     else if (p[0] === "admin") await V.admin(app);
@@ -472,6 +515,7 @@ addEventListener("hashchange", route);
 document.addEventListener("submit", async e => {
   const f = e.target.id;
   if (f === "sf") { e.preventDefault(); const v = val("q"); location.hash = v ? "#/cari/" + enc(v) : "#/"; }
+  if (f === "df") { e.preventDefault(); if (isAdmin()) await saveDoc(); }
   if (f === "ef") {
     e.preventDefault(); if (!isAdmin()) return;
     const slug = val("e-slug"), pasal = val("e-pasal"), isNew = !val("e-id");
@@ -503,6 +547,11 @@ document.addEventListener("click", async e => {
     if (d.act === "openpdf") location.hash = "#/kitab/" + d.s;
     if (d.act === "dlpdf") await dlPdf(d.s);
     if (d.act === "dltxt") { const l = await lawOf(d.s), arts = await API.articles(d.s), t = l.title + "\n\n" + arts.map(a => `${lbl(a)}\n${a.text}`).join("\n\n"), a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/plain" })); a.download = d.s + ".txt"; a.click(); }
+    if (d.act === "adddoc") { if (isAdmin()) { $("#addbox").innerHTML = docForm(null); $("#d-grp").value = d.j; $("#addbox").scrollIntoView(); } return; }
+    if (d.act === "editdoc") { if (isAdmin()) { const l = await API.law(d.s); $("#addbox").innerHTML = docForm(l); $("#d-grp").value = l.grp; $("#addbox").scrollIntoView(); } return; }
+    if (d.act === "deldoc") { if (isAdmin() && confirm("Hapus dokumen ini beserta PDF dan semua pasalnya?")) { await delDocs([d.s]); toast("Dokumen dihapus."); if (location.hash.startsWith("#/law")) location.hash = "#/"; else route(); } return; }
+    if (d.act === "selmode") { KF.selecting = !KF.selecting; KF.sel.clear(); b.textContent = KF.selecting ? "Selesai memilih" : "Pilih"; $("#delb").hidden = !KF.selecting; $("#delb").textContent = "Hapus terpilih (0)"; paintKitab(); return; }
+    if (d.act === "delsel") { const n = KF.sel.size; if (n && isAdmin() && confirm(`Hapus ${n} dokumen terpilih beserta PDF dan pasalnya?`)) { await delDocs([...KF.sel]); toast(n + " dokumen dihapus."); route(); } return; }
     if (d.act === "gotoedit") { EDIT = true; location.hash = "#/a/" + enc(d.id); return; }
     if (d.act === "addart") { if (isAdmin()) $("#addbox").innerHTML = artForm(null, d.s); return; }
     if (d.act === "cancelEdit") { b.closest("form").remove(); return; }
@@ -515,6 +564,11 @@ document.addEventListener("click", async e => {
     if (d.act === "pdf") location.hash = `#/kitab/${cur.law_slug}/${cur.page}`;
     if (d.act === "bm") { const s = store.get(), i = s.indexOf(cur.id); i < 0 ? s.push(cur.id) : s.splice(i, 1); store.set(s); b.textContent = i < 0 ? "Hapus dari tersimpan" : "Simpan pasal"; toast(i < 0 ? "Pasal disimpan" : "Pasal dihapus"); }
   } catch (err) { toast("Terjadi kesalahan: " + (err.message || err)); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.id === "d-file" && t.files[0]) autofill(t.files[0]);
+  if (t.dataset.sel) { t.checked ? KF.sel.add(t.dataset.sel) : KF.sel.delete(t.dataset.sel); const b = $("#delb"); if (b) b.textContent = `Hapus terpilih (${KF.sel.size})`; }
 });
 $("#theme").addEventListener("click", () => {
   const d = document.documentElement, dark = d.dataset.theme === "dark";
