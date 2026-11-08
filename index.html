@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HukumPedia — Kamus Hukum Indonesia</title>
 <meta name="description" content="Cari pasal, kitab, dan istilah hukum Indonesia untuk advokat dan mahasiswa hukum.">
+<meta name="theme-color" content="#14213D">
+<meta name="application-name" content="HukumPedia">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HukumPedia">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
@@ -19,7 +29,7 @@ h1,h2,h3,.serif{font-family:"Playfair Display",Georgia,serif;line-height:1.25}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 header{background:var(--navy);color:var(--onnavy);position:sticky;top:0;z-index:5;border-bottom:3px solid var(--gold)}
 .bar{max-width:920px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.brand{font:700 22px "Playfair Display",serif;margin-right:auto}
+.brand{font:700 22px "Playfair Display",serif;margin-right:auto;display:flex;align-items:center;gap:8px}
 .brand span{color:var(--gold)}
 #auth{display:flex;gap:8px;align-items:center;font-size:13px}
 input,select,textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:9px 12px;max-width:100%}
@@ -80,7 +90,7 @@ dd{margin:2px 0 0;color:var(--mute);max-width:68ch}
 <body>
 <header>
   <div class="bar">
-    <a class="brand" href="#/">Hukum<span>Pedia</span></a>
+    <a class="brand" href="#/"><img src="logo.svg" alt="" width="30" height="30">Hukum<span>Pedia</span></a>
     <span id="auth"></span>
     <button id="theme" type="button" aria-label="Ganti tema">Tema</button>
   </div>
@@ -103,7 +113,8 @@ const SUPABASE_KEY = "sb_publishable_Z-xJzXWqdLBn5nsqNSC3vA_gok7JcEA";
 
 const sb = (SUPABASE_URL && SUPABASE_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 let USER = null, ROLE = null, RECOVERY = false, VIEW = null, cur = null, loginMode = "in", KL = "", EDIT = false;
-const KF = { sel: new Set(), selecting: false };
+const KF = { sel: new Set(), selecting: false }, PF = { sel: new Set(), selecting: false }, GF = { sel: new Set(), selecting: false };
+let LAST = "";
 const isAdmin = () => ROLE === "admin";
 
 /* ---------- Util ---------- */
@@ -187,20 +198,24 @@ const artForm = (a, slug) => `<form id="ef" class="frm" style="margin:14px 0;pad
   <div class="row" style="margin:0"><button class="p" type="submit">Simpan</button><button type="button" data-act="cancelEdit">Batal</button></div></form>`;
 const lawItem = l => `<a class="item" href="#/law/${esc(l.slug)}"><b class="serif">${esc(l.short)}</b><small>${esc(l.title)}</small><div class="meta"><span class="tag">${esc(l.subject || "")}</span>${l.year || ""}</div></a>`;
 const card = (a, l, q) => `<a class="item" href="#/a/${enc(a.id)}"><b class="serif">${esc(lbl(a))}</b><small>${esc(l ? l.short : "")}${a.bab_title ? " · " + esc(a.bab_title) : ""}</small><div>${hl(snip(a.text, q), q)}</div></a>`;
+const chk = (set, key, attr) => set.selecting ? `<label><input type="checkbox" data-${attr}="${esc(key)}" ${set.sel.has(String(key)) ? "checked" : ""}> Pilih</label>` : "";
+const lawAdmin = l => isAdmin() ? `<div class="row" style="margin:-4px 0 12px">${chk(PF, l.slug, "psel")}<button data-act="editdoc" data-s="${esc(l.slug)}">Edit</button><button data-act="deldoc" data-s="${esc(l.slug)}">Hapus</button></div>` : "";
+const artAdmin = a => isAdmin() ? `<div class="row" style="margin:-4px 0 12px">${chk(PF, a.id, "psel")}<button data-act="gotoedit" data-id="${esc(a.id)}">Edit</button><button data-act="delart2" data-id="${esc(a.id)}">Hapus</button></div>` : "";
+const pTool = what => isAdmin() ? `<div class="row"><button data-act="psel">${PF.selecting ? "Selesai memilih" : "Pilih"}</button>${PF.selecting ? `<button data-act="pdel" data-what="${what}" id="pdelb">Hapus terpilih (${PF.sel.size})</button>` : ""}</div>` : "";
 const V = {
   login(app, mode = "in") {
     loginMode = mode;
     const pw = mode !== "reset" ? `<input id="pw" type="password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6" autocomplete="${mode === "in" ? "current-password" : "new-password"}">` : "";
     const pw2 = mode === "up" ? `<input id="pw2" type="password" placeholder="Ulangi kata sandi" required minlength="6" autocomplete="new-password">` : "";
     const links = { in: `<button class="lnk" type="button" data-m="reset">Lupa kata sandi?</button> · <button class="lnk" type="button" data-m="up">Daftar akun baru</button>`, up: `Sudah punya akun? <button class="lnk" type="button" data-m="in">Masuk</button>`, reset: `<button class="lnk" type="button" data-m="in">Kembali ke halaman masuk</button>` }[mode];
-    app.innerHTML = `<div class="auth"><h1>${{ in: "Masuk", up: "Daftar akun", reset: "Lupa kata sandi" }[mode]}</h1>
+    app.innerHTML = `<div class="auth"><img src="logo.svg" alt="HukumPedia" width="64" height="64" style="display:block;margin-bottom:12px"><h1>${{ in: "Masuk", up: "Daftar akun", reset: "Lupa kata sandi" }[mode]}</h1>
     <p class="sub">${mode === "reset" ? "Masukkan email Anda. Kami kirim tautan untuk membuat kata sandi baru." : "HukumPedia: kitab, pasal, dan istilah hukum untuk advokat dan mahasiswa hukum."}</p>
     <form id="lf" class="frm"><input id="em" type="email" placeholder="Email" required autocomplete="email">${pw}${pw2}<button class="p" type="submit">${{ in: "Masuk", up: "Daftar", reset: "Kirim tautan reset" }[mode]}</button></form>
     <p id="lm" class="meta" role="status"></p><p class="meta">${links}</p>
     ${mode === "up" ? `<p class="meta">Akun baru otomatis berperan member (membaca, mencari, mengunduh). Peran editor diberikan oleh pengelola.</p>` : ""}</div>`;
   },
   recovery(app) {
-    app.innerHTML = `<div class="auth"><h1>Kata sandi baru</h1><p class="sub">Buat kata sandi baru untuk akun Anda.</p>
+    app.innerHTML = `<div class="auth"><img src="logo.svg" alt="HukumPedia" width="64" height="64" style="display:block;margin-bottom:12px"><h1>Kata sandi baru</h1><p class="sub">Buat kata sandi baru untuk akun Anda.</p>
     <form id="rf" class="frm"><input id="np" type="password" placeholder="Kata sandi baru (min. 6 karakter)" required minlength="6" autocomplete="new-password"><input id="np2" type="password" placeholder="Ulangi kata sandi baru" required minlength="6" autocomplete="new-password"><button class="p" type="submit">Simpan kata sandi</button></form><p id="lm" class="meta" role="status"></p></div>`;
   },
 
@@ -208,12 +223,13 @@ const V = {
     const laws = await API.laws(); laws.forEach(l => lawCache[l.slug] = l);
     let h = `<h1>Cari pasal</h1><p class="sub">Ketik kata kunci. Semua pasal yang memuatnya tampil, dikelompokkan per peraturan beserta sumbernya.</p>
     <form id="sf" class="row"><input id="q" type="search" value="${esc(q)}" placeholder="Contoh: penyidikan, wanprestasi, pasal 338" aria-label="Kata kunci" style="flex:1 1 240px"><button class="p" type="submit">Cari</button></form>${isAdmin() ? `<div class="row"><button class="p" data-act="adddoc" data-j="peraturan">+ Tambah peraturan (PDF)</button></div><div id="addbox"></div>` : ""}`;
-    if (!q) { const L = laws.filter(l => l.grp === "peraturan"); return h + `<h2 class="bab">Peraturan perundang-undangan</h2>` + (L.length ? L.map(lawItem).join("") : empty("Belum ada peraturan. Editor dapat menambahkannya lewat menu Editor.")); }
+    if (!q) { const L = laws.filter(l => l.grp === "peraturan"); return h + `<h2 class="bab">Peraturan perundang-undangan</h2>` + (L.length ? pTool("laws") + L.map(l => lawItem(l) + lawAdmin(l)).join("") : empty("Belum ada peraturan. Editor dapat menambahkannya lewat menu Editor.")); }
     const r = await API.search(q), by = {};
     r.articles.forEach(a => (by[a.law_slug] ||= []).push(a));
     h += `<p class="sub">${r.articles.length} pasal dalam ${Object.keys(by).length} peraturan${r.terms.length ? ", " + r.terms.length + " istilah" : ""}</p>`;
     if (r.terms.length) h += `<h2 class="bab">Istilah</h2><dl>` + r.terms.map(g => `<dt>${hl(g.term, q)}</dt><dd>${hl(g.definition, q)}</dd>`).join("") + `</dl>`;
-    for (const [slug, list] of Object.entries(by)) { const l = lawCache[slug]; h += `<div class="grp"><a href="#/law/${esc(slug)}"><b class="serif">${esc(l ? l.title : slug)}</b></a><small>${esc(l ? l.short : "")} · ${list.length} pasal ditemukan</small></div>` + list.map(a => card(a, l, q)).join(""); }
+    if (r.articles.length) h += pTool("arts");
+    for (const [slug, list] of Object.entries(by)) { const l = lawCache[slug]; h += `<div class="grp"><a href="#/law/${esc(slug)}"><b class="serif">${esc(l ? l.title : slug)}</b></a><small>${esc(l ? l.short : "")} · ${list.length} pasal ditemukan</small></div>` + list.map(a => card(a, l, q) + artAdmin(a)).join(""); }
     return h + (r.articles.length || r.terms.length ? "" : empty("Tidak ada hasil. Coba kata kunci lain atau format “pasal 338”."));
   },
   async law(slug) {
@@ -221,7 +237,8 @@ const V = {
     if (!l) return empty("Peraturan tidak ditemukan.");
     let h = `<a class="crumb" href="#/">← Pasal</a><h1>${esc(l.short)}</h1><p class="sub">${esc(l.title)}</p><p class="pj">${esc(l.description || "")}</p>
     <div class="row">${l.pdf_path ? `<button class="p" data-act="openpdf" data-s="${esc(slug)}">Buka PDF</button><button data-act="dlpdf" data-s="${esc(slug)}">Unduh PDF</button>` : ""}<button data-act="dltxt" data-s="${esc(slug)}">Unduh teks (.txt)</button>${isAdmin() ? `<button data-act="addart" data-s="${esc(slug)}">+ Tambah pasal</button><button data-act="editdoc" data-s="${esc(slug)}">Edit info</button><button data-act="deldoc" data-s="${esc(slug)}">Hapus dokumen</button>` : ""}</div><div id="addbox"></div>`, last = null;
-    for (const a of arts) { const key = (a.bab || "") + a.bab_title; if (key !== last) { h += `<h2 class="bab">${a.bab ? "Bab " + esc(a.bab) + " — " : ""}${esc(a.bab_title || "")}</h2>`; last = key; } h += card(a, l, "") + (isAdmin() ? `<div class="row" style="margin:-4px 0 12px"><button data-act="gotoedit" data-id="${esc(a.id)}">Edit pasal</button></div>` : ""); }
+    if (arts.length) h += pTool("arts");
+    for (const a of arts) { const key = (a.bab || "") + a.bab_title; if (key !== last) { h += `<h2 class="bab">${a.bab ? "Bab " + esc(a.bab) + " — " : ""}${esc(a.bab_title || "")}</h2>`; last = key; } h += card(a, l, "") + artAdmin(a); }
     return h + (arts.length ? "" : empty("Belum ada pasal untuk peraturan ini."));
   },
   async article(id) {
@@ -252,7 +269,12 @@ const V = {
       <div id="vw"><p class="sub" style="color:#fff">Memuat PDF…</p></div>`;
     await viewer(l, start);
   },
-  async kamus() { V.kd = await API.glossary(); KL = ""; return `<h1>Kamus istilah hukum</h1><p class="sub">Istilah Latin dan istilah teknis. Pilih huruf untuk menyaring.</p><input id="kf" type="search" placeholder="Cari istilah…" aria-label="Cari istilah" style="width:100%;max-width:360px"><div class="chips" id="kc"></div><div id="kl"></div>`; },
+  async kamus() {
+    V.kd = await API.glossary(); KL = ""; GF.selecting = false; GF.sel.clear();
+    return `<h1>Kamus istilah hukum</h1><p class="sub">Istilah Latin dan istilah teknis. Pilih huruf untuk menyaring.</p>
+    ${isAdmin() ? `<div class="row"><button class="p" data-act="addterm">+ Tambah istilah</button><button data-act="gsel">Pilih</button><button data-act="gdel" id="gdelb" hidden>Hapus terpilih (0)</button></div>` : ""}<div id="addbox"></div>
+    <input id="kf" type="search" placeholder="Cari istilah…" aria-label="Cari istilah" style="width:100%;max-width:360px"><div class="chips" id="kc"></div><div id="kl"></div>`;
+  },
   async simpan() {
     const arts = await API.byIds(store.get()), laws = await API.laws(); laws.forEach(l => lawCache[l.slug] = l);
     return `<h1>Pasal tersimpan</h1><p class="sub">Tersimpan di peramban ini saja.</p>` + (arts.length ? arts.map(a => card(a, lawCache[a.law_slug], "")).join("") : empty("Belum ada pasal tersimpan. Buka sebuah pasal lalu pilih “Simpan pasal”."));
@@ -269,7 +291,7 @@ function paintKamus() {
   const f = $("#kf").value.toLowerCase(), L = t => /[A-Za-z]/.test(t[0]) ? t[0].toUpperCase() : "#", have = new Set(V.kd.map(x => L(x.term)));
   $("#kc").innerHTML = `<button class="chip ${KL ? "" : "on"}" data-l="">Semua</button>` + [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].map(c => `<button class="chip ${KL === c ? "on" : ""}" data-l="${c}" ${have.has(c) ? "" : "disabled"}>${c}</button>`).join("");
   const g = V.kd.filter(x => (!KL || L(x.term) === KL) && (x.term + x.definition).toLowerCase().includes(f)); let pl = "";
-  $("#kl").innerHTML = g.length ? "<dl>" + g.map(x => { const c = L(x.term), h = c !== pl && !KL ? `<div class="letter">${c}</div>` : ""; pl = c; return h + `<dt>${hl(x.term, f)}</dt><dd>${hl(x.definition, f)}</dd>`; }).join("") + "</dl>" : empty("Istilah tidak ditemukan.");
+  $("#kl").innerHTML = g.length ? "<dl>" + g.map(x => { const c = L(x.term), h = c !== pl && !KL ? `<div class="letter">${c}</div>` : ""; pl = c; return h + `<dt>${hl(x.term, f)}</dt><dd>${hl(x.definition, f)}</dd>` + (isAdmin() ? `<div class="row" style="margin:4px 0 0">${chk(GF, x.id, "gsel")}<button data-act="editterm" data-id="${x.id}">Edit</button><button data-act="delterm" data-id="${x.id}">Hapus</button></div>` : ""); }).join("") + "</dl>" : empty("Istilah tidak ditemukan.");
 }
 
 /* ---------- PDF.js: pembaca (Kitab) dan pengimpor (Editor) ---------- */
@@ -376,6 +398,7 @@ function parseArticles(pages, slug) {
 }
 
 /* ---------- Panel editor (admin) ---------- */
+const termForm = x => `<form id="tf" class="frm" style="margin:14px 0;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:6px"><h3 style="margin:0">${x ? "Edit istilah" : "Tambah istilah"}</h3><input type="hidden" id="t-old" value="${esc(x?.term || "")}"><input id="t-term" placeholder="Istilah" required value="${esc(x?.term || "")}"><textarea id="t-def" rows="3" required placeholder="Arti">${esc(x?.definition || "")}</textarea><div class="row" style="margin:0"><button class="p" type="submit">Simpan</button><button type="button" data-act="cancelEdit">Batal</button></div></form>`;
 /* ---------- Metadata otomatis dari PDF (ala Mendeley) ---------- */
 const tcase = t => t.toLowerCase().replace(/(^|[\s(-])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Dan|Atas|Dengan|Yang|Di|Ke|Dari|Untuk|Pada|Tentang|Atau)\b/g, w => w.toLowerCase());
 async function extractMeta(file) {
@@ -451,36 +474,12 @@ async function delDocs(slugs) {
 /* ---------- Panel editor (admin) ---------- */
 V.admin = async function (app) {
   if (!isAdmin()) { app.innerHTML = empty("Halaman ini khusus editor (admin)."); return; }
-  app.innerHTML = `<h1>Panel editor</h1><p id="msg" class="note" role="status" hidden></p>
-  <h2 class="bab">1. Tambah dokumen dari PDF</h2>
-  <p class="meta">Pilih PDF dan judul, tahun, serta jenisnya terbaca otomatis; semua isian tetap bisa Anda sunting. Untuk mengubah atau menghapus dokumen, pakai tombol Edit dan Hapus pada kartunya di menu Kitab atau di halaman peraturannya. Pasal diubah langsung di halaman pasalnya.</p>
+  app.innerHTML = `<h1>Panel editor</h1>
+  <h2 class="bab">Tambah dokumen dari PDF</h2>
+  <p class="meta">Pilih PDF, lalu judul, tahun, dan jenisnya terbaca otomatis; semua isian tetap bisa Anda sunting.</p>
   <div class="row"><button class="p" data-act="adddoc" data-j="kitab">+ Tambah kitab / buku</button><button class="p" data-act="adddoc" data-j="peraturan">+ Tambah peraturan / UU</button></div><div id="addbox"></div>
-  <h2 class="bab">2. Kelola kamus</h2>
-  <div class="gbox" id="glist"></div>
-  <form id="gf" class="frm" style="margin-top:10px"><input type="hidden" id="g-old"><input id="g-term" placeholder="Istilah" required><textarea id="g-def" rows="3" placeholder="Arti" required></textarea><button class="p">Simpan istilah</button></form>`;
-  const fail = e => { const m = $("#msg"); m.hidden = false; m.textContent = "Gagal: " + (e.message || e); window.scrollTo(0, 0); };
-  const ok = t => { const m = $("#msg"); m.hidden = false; m.textContent = t; toast(t); };
-  const gl = async () => {
-    const g = await API.glossary();
-    $("#glist").innerHTML = g.length ? "<dl>" + g.map(x => `<dt>${esc(x.term)}</dt><dd>${esc(x.definition)}</dd><div class="row" style="margin:4px 0 0"><button data-ge="${x.id}" type="button">Ubah</button><button data-gd="${x.id}" type="button">Hapus</button></div>`).join("") + "</dl>" : empty("Belum ada istilah.");
-    $("#glist").onclick = async e => {
-      try {
-        const x = g.find(i => String(i.id) === (e.target.dataset.ge || e.target.dataset.gd)); if (!x) return;
-        if (e.target.dataset.ge) { $("#g-old").value = x.term; $("#g-term").value = x.term; $("#g-def").value = x.definition; $("#gf").scrollIntoView(); }
-        else if (confirm("Hapus istilah “" + x.term + "”?")) { const r = await sb.from("glossary").delete().eq("id", x.id); if (r.error) throw r.error; gl(); }
-      } catch (z) { fail(z); }
-    };
-  };
-  $("#gf").onsubmit = async e => {
-    e.preventDefault();
-    try {
-      const old = val("g-old"), term = val("g-term");
-      if (old && old !== term) { const d = await sb.from("glossary").delete().eq("term", old); if (d.error) throw d.error; }
-      const r = await sb.from("glossary").upsert({ term, definition: val("g-def") }, { onConflict: "term" }); if (r.error) throw r.error;
-      $("#gf").reset(); $("#g-old").value = ""; ok("Istilah tersimpan."); gl();
-    } catch (x) { fail(x); }
-  };
-  gl().catch(fail);
+  <h2 class="bab">Mengubah dan menghapus</h2>
+  <p class="meta">Tombol Edit, Hapus, dan Pilih ada langsung di tiap halaman: <a href="#/kitab"><u>Kitab</u></a> (kartu kitab), <a href="#/"><u>Pasal</u></a> (peraturan dan hasil pencarian pasal), halaman pasal, dan <a href="#/kamus"><u>Kamus</u></a> (istilah).</p>`;
 };
 
 /* ---------- Router ---------- */
@@ -489,6 +488,7 @@ async function route() {
   let raw = location.hash.slice(1) || "/"; try { raw = decodeURIComponent(raw); } catch {}
   if (/error_description=/.test(raw)) { const m = raw.match(/error_description=([^&]+)/); toast((m ? m[1].replace(/\+/g, " ") : "Tautan tidak valid") + "."); raw = "/"; }
   if (/access_token=|refresh_token=|type=recovery|type=signup|error=/.test(raw)) raw = "/";
+  if (raw !== LAST) { PF.selecting = false; PF.sel.clear(); GF.selecting = false; GF.sel.clear(); LAST = raw; }
   const p = raw.split("/").filter(Boolean), app = $("#app");
   const k = !p.length || p[0] === "cari" ? "pasal" : ["kitab", "kamus", "simpan", "admin"].includes(p[0]) ? p[0] : "";
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.k === k));
@@ -515,6 +515,14 @@ addEventListener("hashchange", route);
 document.addEventListener("submit", async e => {
   const f = e.target.id;
   if (f === "sf") { e.preventDefault(); const v = val("q"); location.hash = v ? "#/cari/" + enc(v) : "#/"; }
+  if (f === "tf") {
+    e.preventDefault(); if (!isAdmin()) return; const old = val("t-old"), term = val("t-term");
+    try {
+      if (old && old !== term) { const d = await sb.from("glossary").delete().eq("term", old); if (d.error) throw d.error; }
+      const r = await sb.from("glossary").upsert({ term, definition: val("t-def") }, { onConflict: "term" }); if (r.error) throw r.error;
+      V.kd = await API.glossary(); $("#addbox").innerHTML = ""; paintKamus(); toast("Istilah tersimpan.");
+    } catch (x) { toast("Gagal: " + x.message); }
+  }
   if (f === "df") { e.preventDefault(); if (isAdmin()) await saveDoc(); }
   if (f === "ef") {
     e.preventDefault(); if (!isAdmin()) return;
@@ -552,6 +560,14 @@ document.addEventListener("click", async e => {
     if (d.act === "deldoc") { if (isAdmin() && confirm("Hapus dokumen ini beserta PDF dan semua pasalnya?")) { await delDocs([d.s]); toast("Dokumen dihapus."); if (location.hash.startsWith("#/law")) location.hash = "#/"; else route(); } return; }
     if (d.act === "selmode") { KF.selecting = !KF.selecting; KF.sel.clear(); b.textContent = KF.selecting ? "Selesai memilih" : "Pilih"; $("#delb").hidden = !KF.selecting; $("#delb").textContent = "Hapus terpilih (0)"; paintKitab(); return; }
     if (d.act === "delsel") { const n = KF.sel.size; if (n && isAdmin() && confirm(`Hapus ${n} dokumen terpilih beserta PDF dan pasalnya?`)) { await delDocs([...KF.sel]); toast(n + " dokumen dihapus."); route(); } return; }
+    if (d.act === "psel") { PF.selecting = !PF.selecting; PF.sel.clear(); route(); return; }
+    if (d.act === "pdel") { const n = PF.sel.size; if (n && isAdmin() && confirm(`Hapus ${n} ${d.what === "laws" ? "dokumen beserta PDF dan pasalnya" : "pasal"} terpilih?`)) { if (d.what === "laws") await delDocs([...PF.sel]); else { const r = await sb.from("articles").delete().in("id", [...PF.sel]); if (r.error) throw r.error; } PF.sel.clear(); PF.selecting = false; toast(n + " item dihapus."); route(); } return; }
+    if (d.act === "delart2") { if (isAdmin() && confirm("Hapus pasal ini?")) { const r = await sb.from("articles").delete().eq("id", d.id); if (r.error) throw r.error; toast("Pasal dihapus."); route(); } return; }
+    if (d.act === "addterm") { if (isAdmin()) { $("#addbox").innerHTML = termForm(null); $("#t-term").focus(); } return; }
+    if (d.act === "editterm") { if (isAdmin()) { $("#addbox").innerHTML = termForm(V.kd.find(x => String(x.id) === d.id)); $("#addbox").scrollIntoView(); } return; }
+    if (d.act === "delterm") { if (isAdmin() && confirm("Hapus istilah ini?")) { const r = await sb.from("glossary").delete().eq("id", d.id); if (r.error) throw r.error; V.kd = await API.glossary(); paintKamus(); toast("Istilah dihapus."); } return; }
+    if (d.act === "gsel") { GF.selecting = !GF.selecting; GF.sel.clear(); b.textContent = GF.selecting ? "Selesai memilih" : "Pilih"; $("#gdelb").hidden = !GF.selecting; $("#gdelb").textContent = "Hapus terpilih (0)"; paintKamus(); return; }
+    if (d.act === "gdel") { const n = GF.sel.size; if (n && isAdmin() && confirm(`Hapus ${n} istilah terpilih?`)) { const r = await sb.from("glossary").delete().in("id", [...GF.sel]); if (r.error) throw r.error; GF.sel.clear(); V.kd = await API.glossary(); paintKamus(); $("#gdelb").textContent = "Hapus terpilih (0)"; toast(n + " istilah dihapus."); } return; }
     if (d.act === "gotoedit") { EDIT = true; location.hash = "#/a/" + enc(d.id); return; }
     if (d.act === "addart") { if (isAdmin()) $("#addbox").innerHTML = artForm(null, d.s); return; }
     if (d.act === "cancelEdit") { b.closest("form").remove(); return; }
@@ -568,6 +584,8 @@ document.addEventListener("click", async e => {
 document.addEventListener("change", e => {
   const t = e.target;
   if (t.id === "d-file" && t.files[0]) autofill(t.files[0]);
+  if (t.dataset.psel) { t.checked ? PF.sel.add(t.dataset.psel) : PF.sel.delete(t.dataset.psel); const b = $("#pdelb"); if (b) b.textContent = `Hapus terpilih (${PF.sel.size})`; }
+  if (t.dataset.gsel) { t.checked ? GF.sel.add(t.dataset.gsel) : GF.sel.delete(t.dataset.gsel); const b = $("#gdelb"); if (b) b.textContent = `Hapus terpilih (${GF.sel.size})`; }
   if (t.dataset.sel) { t.checked ? KF.sel.add(t.dataset.sel) : KF.sel.delete(t.dataset.sel); const b = $("#delb"); if (b) b.textContent = `Hapus terpilih (${KF.sel.size})`; }
 });
 $("#theme").addEventListener("click", () => {
@@ -575,6 +593,7 @@ $("#theme").addEventListener("click", () => {
   d.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("hp_theme", d.dataset.theme); } catch {}
 });
 try { const t = localStorage.getItem("hp_theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 addEventListener("DOMContentLoaded", route);
 </script>
 </body>
